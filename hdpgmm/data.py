@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 from pathlib import Path
 
 import numpy as np
@@ -37,26 +37,36 @@ class HDFMultiVarSeqDataset(Dataset):
 
 
 def collate_var_len_seq(
-    samples: list[tuple[int, torch.Tensor]]
+    samples: list[tuple[int, torch.Tensor]],
+    max_len: Optional[int] = None
 ) -> tuple[torch.Tensor,      # mask_batch
            torch.Tensor,      # data_batch
            torch.LongTensor]: # batch_idx
     """
     """
+    if max_len is None:
+        max_len = torch.inf
+
     batch_idx, samples = zip(*samples)
     batch_idx = torch.LongTensor(batch_idx)
     batch_size = len(samples)
     dim = samples[0].shape[-1]
-    max_len = max([s.shape[0] for s in samples])
+    max_len_batch = min(max([s.shape[0] for s in samples]), max_len)
 
-    mask = torch.zeros((batch_size, max_len), dtype=torch.float32)
-    data_batch_mat = torch.zeros((batch_size, max_len, dim),
+    mask = torch.zeros((batch_size, max_len_batch), dtype=torch.float32)
+    data_batch_mat = torch.zeros((batch_size, max_len_batch, dim),
                                  dtype=torch.float32)
 
     for j, x in enumerate(samples):
         n = x.shape[0]
-        mask[j, :n] = 1.
-        data_batch_mat[j, :n] = x
+        if n > max_len:
+            # randomly slice the data
+            start = np.random.randint(n - max_len)
+            mask[j] = 1.
+            data_batch_mat[j] = x[start:start + max_len]
+        else:
+            mask[j, :n] = 1.
+            data_batch_mat[j, :n] = x
 
     return mask, data_batch_mat, batch_idx
 

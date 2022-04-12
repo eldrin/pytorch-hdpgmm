@@ -1,4 +1,5 @@
 from typing import Optional
+from functools import partial
 from pathlib import Path
 import pickle as pkl
 
@@ -168,8 +169,9 @@ def e_step(
         else:
             b[batch_idx] = (w[batch_idx, 0] / w[batch_idx, 1])[:, None]
 
-        varphi.data.copy_(
-            Eq_ln_beta[None, None] + torch.bmm(zeta.permute(0, 2, 1), Eq_eta_batch)
+        varphi.copy_(
+            Eq_ln_beta[None, None]
+            + torch.bmm(zeta.permute(0, 2, 1), Eq_eta_batch)
         )
         varphi -= torch.logsumexp(varphi, dim=-1)[:, :, None]
         a[batch_idx] += zeta[:, :, :-1].sum(1)
@@ -191,13 +193,19 @@ def e_step(
         Eq_ln_pi[:, :T-1] = Eq_ln_pi_hat
         Eq_ln_pi[:, 1:] += Eq_ln_1_min_pi_hat_cumsum
 
-        zeta.data.copy_(
-            Eq_ln_pi[:,None] + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
+        zeta.copy_(
+            Eq_ln_pi[:,None]
+            + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
         )
+        # zeta[:] = (
+        #     Eq_ln_pi[:, None]
+        #     + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
+        # )
         zeta -= torch.logsumexp(zeta, dim=-1)[:, :, None]
-        zeta.data.copy_(
+        zeta.copy_(
             torch.clamp(torch.exp(zeta), min=eps)
         )
+        # zeta[:] = torch.clamp(torch.exp(zeta), min=eps)
         zeta *= mask_batch[:, :, None]
 
         w[batch_idx, 0] = s1 + T - 1
@@ -298,7 +306,8 @@ def m_step(
         e = torch.rand(*r.shape, device=data_batch.device)
         e /= e.sum(-1)[:, :, None]
         e *= mask_batch[:, :, None]
-        r = r * (1. - noise_ratio) + e * noise_ratio
+        r *= (1. - noise_ratio)
+        r += e * noise_ratio
         r *= norm[:, :, None] * mask_batch[:, :, None]
     N += r.sum((0, 1))
 
@@ -370,8 +379,8 @@ def update_parameters(
 
     for name in corpus_level_params:
         new_param = (1. - rho) * old_params[name] + rho * params[name]
-        params[name].data.copy_(new_param.data)
-        old_params[name].data.copy_(params[name][:].data)
+        params[name].copy_(new_param)
+        old_params[name].copy_(params[name][:])
 
     # re-compute auxiliary variables
     W = torch.linalg.inv(params['C'] * params['nu'][:, None, None])
@@ -526,6 +535,7 @@ def variational_inference(
     n_W0_cluster: int = 128,
     cluster_frac: float = .01,
     warm_start_with: Optional[hdpgmm.HDPGMM] = None,
+    max_len: Optional[int] = None,
     save_every: Optional[int] = None,
     out_path: str = './',
     prefix: str = 'hdp_gmm',
@@ -542,7 +552,7 @@ def variational_inference(
     loader = DataLoader(
         dataset,
         num_workers=data_parallel_num_workers,
-        collate_fn=collate_var_len_seq,
+        collate_fn=partial(collate_var_len_seq, max_len=max_len),
         batch_size=batch_size,
         shuffle=True
     )
@@ -575,6 +585,7 @@ def variational_inference(
                     batch_idx = batch_idx.to(device)
 
                     with torch.no_grad():
+
                         # init some variables (including accumulators?)
                         varphi = torch.zeros((data_batch.shape[0],
                                               max_components_document,
@@ -672,6 +683,12 @@ def variational_inference(
                             old_params=old_params
                         )
 
+                        # free up some big variables to save mem
+                        del Eq_eta
+                        del zeta
+                        del varphi
+                        torch.cuda.empty_cache()
+
                         if save_every is not None and it % save_every == 0:
                             ret = package_model(
                                 max_components_corpus,
@@ -681,7 +698,7 @@ def variational_inference(
                                 trn_liks,
                                 share_alpha0
                             )
-                            path = Path(out_path) / f'{prefix}_it{id:d}.pkl'
+                            path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
                             with path.open('wb') as fp:
                                 pkl.dump(ret, fp)
 
