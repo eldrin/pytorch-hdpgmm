@@ -1,10 +1,12 @@
-from typing import Optional
+from typing import Optional, Union
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 import pickle as pkl
 
 import numpy as np
 import numpy.typing as npt
+from scipy.special import digamma
 
 import torch
 from torch.utils.data import DataLoader
@@ -12,16 +14,24 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bibim.hdp import gaussian as hdpgmm
+from bibim.hdp.gaussian import HDPGMM
 from bibim.data import MVVarSeqData
 
 from .data import (HDFMultiVarSeqDataset,
                    collate_var_len_seq)
+from .math import th_batch_logdotexp_2d as blogdotexp
 
 
 CORPUS_LEVEL_PARAMS =  {'m', 'C', 'beta', 'nu', 'u', 'v', 'y', 'w2'}
 _LOG_2 = torch.log(torch.as_tensor(2.))
 _LOG_PI = torch.log(torch.as_tensor(torch.pi))
 _LOG_2PI = _LOG_2 + _LOG_PI
+
+
+@dataclass
+class HDPGMM_GPU:
+    hdpgmm: HDPGMM
+    whiten_params: Optional[dict[str, npt.ArrayLike]] = None
 
 
 def compute_ln_p_phi_x(
@@ -131,9 +141,9 @@ def compute_normalwishart_probs(
 
 
 def e_step(
-    batch_idx: torch.Tensor,
+    batch_idx: torch.LongTensor,
     data_batch: torch.Tensor,
-    mask_batch: torch.Tensor,
+    mask_batch: torch.BoolTensor,
     Eq_eta_batch: torch.Tensor,
     zeta: torch.Tensor,
     varphi: torch.Tensor,
@@ -197,16 +207,10 @@ def e_step(
             Eq_ln_pi[:,None]
             + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
         )
-        # zeta[:] = (
-        #     Eq_ln_pi[:, None]
-        #     + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
-        # )
         zeta -= torch.logsumexp(zeta, dim=-1)[:, :, None]
-        zeta.copy_(
-            torch.clamp(torch.exp(zeta), min=eps)
-        )
-        # zeta[:] = torch.clamp(torch.exp(zeta), min=eps)
-        zeta *= mask_batch[:, :, None]
+        torch.exp(zeta, out=zeta)
+        torch.clamp(zeta, min=eps, out=zeta)
+        # zeta *= mask_batch[:, :, None]
 
         w[batch_idx, 0] = s1 + T - 1
         w[batch_idx, 1] = s2 - Eq_ln_1_min_pi_hat_cumsum[:, -1]
@@ -233,11 +237,11 @@ def e_step(
         Eq_ln_pc = (torch.exp(varphi) @ Eq_ln_beta).sum()
         Eq_ln_qzqc = (
             (torch.exp(varphi) * varphi).sum()
-            + (zeta * torch.log(torch.clamp(zeta, min=eps)) * mask_batch[:, :, None]).sum()
+            + torch.masked_select(zeta * zeta.log(), mask_batch[..., None]).sum()
         )
-        ln_p_z += (zeta
-                   * torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
-                   * mask_batch[:, :, None]).sum()
+        ln_p_z += torch.masked_select(zeta * torch.bmm(Eq_eta_batch,
+                                                       torch.exp(varphi).permute(0, 2, 1)),
+                                      mask_batch[..., None]).sum()
         Eq_ln_pz += torch.bmm(zeta, Eq_ln_pi[:, :, None]).sum()
 
         # compute likelihood
@@ -287,6 +291,7 @@ def m_step(
     g1: float,
     g2: float,
     noise_ratio: float,
+    chunk_size: int = 128,
     eps: float = 1e-100
 ):
     """
@@ -299,22 +304,31 @@ def m_step(
     S = torch.zeros((K, D, D), dtype=torch.float32, device=data_batch.device)
     N = torch.zeros((K,), dtype=torch.float32, device=data_batch.device)
 
-    r = zeta @ torch.clamp(torch.exp(varphi), min=eps)
-    if noise_ratio > 0:
-        norm = r.sum(-1)
-        r /= torch.clamp(norm[:, :, None], min=eps)
-        e = torch.rand(*r.shape, device=data_batch.device)
-        e /= e.sum(-1)[:, :, None]
-        e *= mask_batch[:, :, None]
-        r *= (1. - noise_ratio)
-        r += e * noise_ratio
-        r *= norm[:, :, None] * mask_batch[:, :, None]
-    N += r.sum((0, 1))
+    # for memory efficiency, we do the chunking here
+    n_chunks = M // chunk_size + (M % chunk_size != 0)
+    for i in range(n_chunks):
+        slc = slice(i * chunk_size, (i+1) * chunk_size)
+        zeta_chunk = zeta[slc]
+        data_chunk = data_batch[slc]
+        mask_chunk = mask_batch[slc].float()
+        varphi_chunk = varphi[slc]
+        r = zeta_chunk @ torch.clamp(torch.exp(varphi_chunk), min=eps)
 
-    for k in range(K):
-        x_bar[k] += torch.bmm(r[:, :, k][:, None], data_batch).sum(0)[0]
-        rx = r[:, :, k][:, :, None]**.5 * data_batch
-        S[k] += torch.bmm(rx.permute(0, 2, 1), rx).sum(0)
+        if noise_ratio > 0:
+            norm = r.sum(-1)
+            r /= torch.clamp(norm[:, :, None], min=eps)
+            e = torch.rand(*r.shape, device=data_batch.device)
+            e /= e.sum(-1)[:, :, None]
+            e *= mask_chunk[:, :, None]
+            r *= (1. - noise_ratio)
+            r += e * noise_ratio
+            r *= norm[:, :, None] * mask_chunk[:, :, None]
+
+        N += r.sum((0, 1))
+        for k in range(K):
+            x_bar[k] += torch.bmm(r[:, :, k][:, None], data_chunk).sum(0)[0]
+            rx = r[:, :, k][:, :, None]**.5 * data_chunk
+            S[k] += torch.bmm(rx.permute(0, 2, 1), rx).sum(0)
 
     u_ = torch.exp(varphi[:, :, :-1]).sum((0, 1))
     v_ = torch.flip(
@@ -380,7 +394,7 @@ def update_parameters(
     for name in corpus_level_params:
         new_param = (1. - rho) * old_params[name] + rho * params[name]
         params[name].copy_(new_param)
-        old_params[name].copy_(params[name][:])
+        old_params[name].copy_(params[name])
 
     # re-compute auxiliary variables
     W = torch.linalg.inv(params['C'] * params['nu'][:, None, None])
@@ -389,19 +403,19 @@ def update_parameters(
 
     # to compute the full Eq[log|lambda_k|]
     K, D = params['m'].shape
-    arangeD = torch.arange(D, device=params['m'].device)
+    arange_d = torch.arange(D, device=params['m'].device)
     log2 = torch.log(torch.as_tensor([2], device=params['m'].device))
     for k in range(K):
         params['W_logdet'][k] += (
-            torch.digamma((params['nu'][k] - arangeD) * .5).sum()
+            torch.digamma((params['nu'][k] - arange_d) * .5).sum()
             + D * log2.item()
         )
 
 
-def init_params(
+def _init_params(
     max_components_corpus: int,
     max_components_documents: int,
-    dataset: HDFMultiVarSeqDataset,
+    loader: DataLoader,
     m0: Optional[torch.Tensor] = None,
     W0: Optional[torch.Tensor] = None,
     nu0: Optional[torch.Tensor] = None,
@@ -411,40 +425,173 @@ def init_params(
     g1: float = 1.,
     g2: float = 1.,
     device: str = 'cpu',
-    n_W0_cluster: int = 128,
-    cluster_frac: float = .01,
     full_uniform_init: bool = True,
-    warm_start_with: Optional[hdpgmm.HDPGMM] = None
-) -> tuple[dict[str, torch.Tensor],
-           dict[str, torch.Tensor]]:
+    warm_start_with: Optional[HDPGMM_GPU] = None
+) -> dict[str, Union[torch.Tensor,
+                     float,
+                     list[float]]]:
     """
     """
-    # get some vars set
+    J = len(loader.dataset)
     K = max_components_corpus
     T = max_components_documents
+    N_, D = loader.dataset._hf['data'].shape
+    W0_inv = np.linalg.inv(W0)
 
-    # build temporary MVVarSeqData from hdf file pointer
-    mvvarseqdat = MVVarSeqData(dataset._hf['indptr'][:],
-                               dataset._hf['data'],
-                               dataset._hf['ids'][:])
 
-    # set / load / sample the hyper priors
-    # TODO: this can be slow if the dataset get larger
-    #       torch-gpu implementation could sped up this routine
-    m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
-                                                m0, W0, nu0, beta0,
-                                                n_W0_cluster, cluster_frac,
-                                                warm_start_with=warm_start_with)
+    if (warm_start_with is not None and
+            isinstance(warm_start_with, HDPGMM_GPU)):
 
-    # get initialization
-    params = hdpgmm.initialize_params(K, T, mvvarseqdat,
-                                      m0=m0, W0=W0, nu0=nu0, beta0=beta0,
-                                      s1=s1, s2=s2, g1=g1, g2=g2,
-                                      full_uniform_init=full_uniform_init,
-                                      warm_start_with=warm_start_with)
-    (m, C, nu, beta, W_chol, W_logdet,
-     u, v, y, a, b, w, w2,
-     start_iter, mean_holdout_probs, train_lik) = params
+        # unpack for further monitoring down below
+        model = warm_start_with
+        mean_holdout_probs = model.training_monitors['mean_holdout_perplexity']
+        train_lik = model.training_monitors['training_lowerbound']
+        start_iter = len(model.training_monitors['training_lowerbound'])
+
+        a = np.empty((J, T - 1))
+        b = np.empty((J, T - 1))
+        w = np.empty((J, 2), dtype=np.float64)
+        w[:, 0] = s1
+        w[:, 1] = s2
+        w2 = np.empty((2,))
+
+        u = np.empty((K - 1,))
+        v = np.empty((K - 1,))
+        y = np.empty((2,))
+
+        m = np.empty((K, D))
+        C = np.empty((K, D, D))
+        beta = np.empty((K,))
+        nu = np.empty((K,))
+
+        for k, phi_ in enumerate(model.variational_params[0]):
+            m[k] = phi_.mu0
+            C[k] = np.linalg.inv(phi_.W) / phi_.nu
+            beta[k] = phi_.lmbda
+            nu[k] = phi_.nu
+
+        u = model.variational_params[1].alphas
+        v = model.variational_params[1].betas
+
+        y[0] = model.variational_params[2].alpha
+        y[1] = model.variational_params[2].beta
+        if isinstance(model.variational_params[3], list):
+            # per-document alpha0
+            for j, w_ in enumerate(model.variational_params[3]):
+                w[j, 0] = w_.alpha
+                w[j, 1] = w_.beta
+            w2[0] = g1
+            w2[1] = g2
+        else:
+            # share alpha0 for all documents
+            w2[0] = model.variational_params[3].alpha
+            w2[1] = model.variational_params[3].beta
+
+    else:
+        # here we compute the parameters from data
+        mean_holdout_probs = []
+        train_lik = []
+        start_iter = 0
+
+        a = np.ones((J, T - 1), dtype=np.float64)
+        b = np.full((J, T - 1), s1 / s2, dtype=np.float64)
+        w = np.empty((J, 2), dtype=np.float64)
+        w[:, 0] = s1
+        w[:, 1] = s2
+        w2 = np.array([s1, s2], dtype=np.float64)
+
+        u = np.ones((K - 1,), dtype=np.float64)
+        v = np.ones((K - 1,), dtype=np.float64)
+        y = np.array([g1, g2], dtype=np.float64)
+
+        m = np.zeros((K, D), dtype=np.float64)
+        C = np.zeros((K, D, D), dtype=np.float64)
+
+        x_bar = torch.zeros((K, D), device=device)
+        S = torch.zeros((K, D, D), device=device)
+        N = torch.zeros((K,), device=device)
+        for mask_batch, data_batch, _ in loader:
+
+            # "flatten" the multivariate vectors using the mask,
+            # which is much easier form to work with this
+            N_ = int(mask_batch.sum().item())  # the number of frames within this batch
+            M = mask_batch.shape[0]  # batch size
+            chunk = torch.empty((N_, data_batch.shape[-1]),
+                                dtype=data_batch.dtype,
+                                device=device)
+            last = 0
+            for j in range(M):
+                n_j = int(mask_batch[j].sum().item())
+                chunk[last:last + n_j] = data_batch[j, :n_j]
+                last += n_j
+
+            # now compute sufficient statistics
+            if full_uniform_init:
+                # populate uniform responsibility per frame/token
+                r = torch.rand(N_, K).to(device)
+                r /= r.sum(1)[:, None]
+
+                # compute the stat and add to buffer
+                N += r.sum(0)
+                x_bar += r.T @ chunk
+                for k in range(K):
+                    S[k] += (r[:, k][:, None] * chunk).T @ chunk
+
+            else:
+                # populate uniform component selection per frame/token
+                r = torch.randint(K, (N_,))
+                for k in range(K):
+                    x_k = chunk[r == k]
+                    N[k] += (r == k).sum()
+                    x_bar[k] += x_k.sum(0)
+                    S[k] += x_k.T @ x_k
+
+        # normalize stats
+        x_bar /= N[:, None]
+        S /= N[:, None, None]
+
+        # set the params back to cpu/numpy side
+        # TODO: this can be avoided by making the entire procedure
+        #       into "torch" based program
+        N = N.detach().cpu().numpy()
+        x_bar = x_bar.detach().cpu().numpy()
+        S = S.detach().cpu().numpy()
+
+        # compute final initialization
+        nu = nu0 + N
+        beta = beta0 + N
+        cov_reg = 1e-6 * np.eye(D)
+        for k in range(K):
+            # the model currently only works with float64
+            x_bar_k = x_bar[k].astype(np.float64)
+            S_k = S[k].astype(np.float64) - np.outer(x_bar_k, x_bar_k)
+
+            # x_bar_ is not yet normalized (Nx_bar)
+            m[k] = beta[k]**-1 * (beta0 * m0 + N[k] * x_bar_k)  # N_k * x_bar_k
+
+            # same for S_ (it's NS) actually
+            # this is terribly slow: scikit-learn DP-GMM circumvent it
+            # through working with cholesky-decomposition of precision matrix
+            # for almost everything (no inversion)
+            dev = (x_bar_k - m0)
+            C[k] = (
+                W0_inv
+                + N[k] * S_k  # N_k * S_k
+                + beta0 * N[k] / (beta0 + N[k]) * np.outer(dev, dev)
+                + cov_reg
+            ) / nu[k]  # normalization as we compute "covariances" here
+
+    # some pre-computations for computing Eq[eta] and Eq[a(eta)]
+    W = np.linalg.inv(C * nu[:, None, None])
+    W_chol = np.linalg.cholesky(W)
+    W_logdet = np.linalg.slogdet(W)[1]
+
+    # to compute the full Eq[log|lambda_k|]
+    for k in range(K):
+        W_logdet[k] += (
+            digamma((nu[k] - np.arange(D)) * .5).sum()
+            + D * _LOG_2
+        )
 
     # prep the containor
     params = {}
@@ -471,6 +618,62 @@ def init_params(
     params['s2'] = s2
     params['g1'] = g1
     params['g2'] = g2
+    params['mean_holdout_perplexity'] = mean_holdout_probs
+    params['training_lowerbound'] = train_lik
+    params['start_iter'] = start_iter
+    if loader.dataset.whiten:
+        params['whiten_params'] = loader.dataset._whitening_params
+
+    return params
+
+
+def init_params(
+    max_components_corpus: int,
+    max_components_documents: int,
+    loader: DataLoader,
+    m0: Optional[torch.Tensor] = None,
+    W0: Optional[torch.Tensor] = None,
+    nu0: Optional[torch.Tensor] = None,
+    beta0: Optional[torch.Tensor] = None,
+    s1: float = 1.,
+    s2: float = 1.,
+    g1: float = 1.,
+    g2: float = 1.,
+    device: str = 'cpu',
+    n_W0_cluster: int = 128,
+    cluster_frac: float = .01,
+    full_uniform_init: bool = True,
+    warm_start_with: Optional[HDPGMM_GPU] = None
+) -> tuple[dict[str, Union[torch.Tensor,
+                           float,
+                           list[float]]],
+           dict[str, torch.Tensor]]:
+    """
+    """
+    # get some vars set
+    K = max_components_corpus
+    T = max_components_documents
+
+    # build temporary MVVarSeqData from hdf file pointer
+    mvvarseqdat = MVVarSeqData(loader.dataset._hf['indptr'][:],
+                               loader.dataset._hf['data'],
+                               loader.dataset._hf['ids'][:])
+
+    # set / load / sample the hyper priors
+    # TODO: this can be slow if the dataset get larger
+    #       torch-gpu implementation could sped up this routine
+    m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
+                                                m0, W0, nu0, beta0,
+                                                n_W0_cluster, cluster_frac,
+                                                warm_start_with=warm_start_with)
+
+    # get initialization
+    params = _init_params(K, T, loader,
+                          m0=m0, W0=W0, nu0=nu0, beta0=beta0,
+                          s1=s1, s2=s2, g1=g1, g2=g2,
+                          full_uniform_init=full_uniform_init,
+                          warm_start_with=warm_start_with,
+                          device=device)
 
     # prep the "old params" to compute the improvement
     old_params = {name: params[name].clone().detach()
@@ -486,28 +689,35 @@ def package_model(
     mean_holdout_probs: list[float],
     train_lik: list[float],
     share_alpha0: bool = False
-) -> hdpgmm.HDPGMM:
+) -> dict[str, HDPGMM_GPU]:
     """
     """
-    return hdpgmm.package_model(
-        max_components_corpus,
-        max_components_document,
-        params['m'].detach().cpu().numpy(),
-        params['C'].detach().cpu().numpy(),
-        params['nu'].detach().cpu().numpy(),
-        params['beta'].detach().cpu().numpy(),
-        params['w'].detach().cpu().numpy(),
-        params['w2'].detach().cpu().numpy(),
-        params['u'].detach().cpu().numpy(),
-        params['v'].detach().cpu().numpy(),
-        params['y'].detach().cpu().numpy(),
-        params['m0'].detach().cpu().numpy(),
-        params['W0'].detach().cpu().numpy(),
-        params['beta0'],
-        params['nu0'],
-        params['s1'], params['s2'], params['g1'], params['g2'],
-        mean_holdout_probs, train_lik, share_alpha0
+    pkg = HDPGMM_GPU(
+        hdpgmm = hdpgmm.package_model(
+            max_components_corpus,
+            max_components_document,
+            params['m'].detach().cpu().numpy(),
+            params['C'].detach().cpu().numpy(),
+            params['nu'].detach().cpu().numpy(),
+            params['beta'].detach().cpu().numpy(),
+            params['w'].detach().cpu().numpy(),
+            params['w2'].detach().cpu().numpy(),
+            params['u'].detach().cpu().numpy(),
+            params['v'].detach().cpu().numpy(),
+            params['y'].detach().cpu().numpy(),
+            params['m0'].detach().cpu().numpy(),
+            params['W0'].detach().cpu().numpy(),
+            params['beta0'],
+            params['nu0'],
+            params['s1'], params['s2'], params['g1'], params['g2'],
+            mean_holdout_probs, train_lik, share_alpha0
+        ),
+        whiten_params = params.get('whiten_params')
     )
+    return pkg
+
+
+# def infer_document():
 
 
 def variational_inference(
@@ -531,10 +741,11 @@ def variational_inference(
     base_noise_ratio: float = 1e-4,
     full_uniform_init: bool = True,
     share_alpha0: bool = True,
+    whiten: bool = False,
     data_parallel_num_workers: int = 0,
     n_W0_cluster: int = 128,
     cluster_frac: float = .01,
-    warm_start_with: Optional[hdpgmm.HDPGMM] = None,
+    warm_start_with: Optional[HDPGMM_GPU] = None,
     max_len: Optional[int] = None,
     save_every: Optional[int] = None,
     out_path: str = './',
@@ -548,7 +759,11 @@ def variational_inference(
     ###################
     # Loading Dataset
     ###################
-    dataset = HDFMultiVarSeqDataset(h5_fn)
+    if warm_start_with and warm_start_with.whiten_params:
+        dataset = HDFMultiVarSeqDataset(h5_fn)
+        dataset._whitening_params = warm_start_with.whiten_params
+    else:
+        dataset = HDFMultiVarSeqDataset(h5_fn, whiten=whiten)
     loader = DataLoader(
         dataset,
         num_workers=data_parallel_num_workers,
@@ -561,7 +776,7 @@ def variational_inference(
     # Initializing Params
     #######################
     params, old_params = init_params(
-        max_components_corpus, max_components_document, dataset,
+        max_components_corpus, max_components_document, loader,
         m0, W0, nu0, beta0, s1, s2, g1, g2,
         device, n_W0_cluster, cluster_frac,
         full_uniform_init=full_uniform_init,
@@ -571,9 +786,9 @@ def variational_inference(
     #######################
     # Update loop!
     #######################
-    trn_liks = []
-    mean_holdout_probs = []
-    it = 0
+    trn_liks = params['training_lowerbound']
+    mean_holdout_probs = params['mean_holdout_perplexity']
+    it = params['start_iter']
     try:
         with tqdm(total=n_epochs, ncols=80, disable=not verbose) as prog:
             for _ in range(n_epochs):

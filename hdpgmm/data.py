@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 
 import h5py
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
@@ -12,11 +13,19 @@ from torch.utils.data import Dataset
 
 class HDFMultiVarSeqDataset(Dataset):
     def __init__(self,
-                 h5_fn: Union[str, Path]):
+                 h5_fn: Union[str, Path],
+                 whiten: bool=False,
+                 chunk_size: int=1024,
+                 verbose: bool=False):
         """
         """
         self.h5_fn = h5_fn
         self._hf = h5py.File(h5_fn, 'r')
+        self.whiten = whiten
+        self.chunk_size = chunk_size
+        self.verbose = verbose
+        if whiten:
+            self._init_whitening()
 
     def __del__(self):
         self._hf.close()
@@ -30,16 +39,33 @@ class HDFMultiVarSeqDataset(Dataset):
     ) -> tuple[int, torch.Tensor]:
         """
         """
+        # index frames/tokens
         j0, j1 = self._hf['indptr'][idx], self._hf['indptr'][idx+1]
-        x = torch.as_tensor(self._hf['data'][j0:j1],
-                            dtype=torch.float32)
+        x = self._hf['data'][j0:j1]
+
+        # whiten, if needed
+        if self.whiten:
+            x -= self._whitening_params['mean'][None]
+            x = x @ self._whitening_params['precision_cholesky']
+
+        # wrap to torch.Tensor
+        x = torch.as_tensor(x, dtype=torch.float32)
+
         return (idx, x)
+
+    def _init_whitening(self):
+        """
+        """
+        # compute whitening parameters
+        self._whitening_params = compute_global_mean_cov(self._hf,
+                                                         self.chunk_size,
+                                                         self.verbose)
 
 
 def collate_var_len_seq(
     samples: list[tuple[int, torch.Tensor]],
     max_len: Optional[int] = None
-) -> tuple[torch.Tensor,      # mask_batch
+) -> tuple[torch.BoolTensor,      # mask_batch
            torch.Tensor,      # data_batch
            torch.LongTensor]: # batch_idx
     """
@@ -53,7 +79,7 @@ def collate_var_len_seq(
     dim = samples[0].shape[-1]
     max_len_batch = min(max([s.shape[0] for s in samples]), max_len)
 
-    mask = torch.zeros((batch_size, max_len_batch), dtype=torch.float32)
+    mask = torch.zeros((batch_size, max_len_batch)).bool()
     data_batch_mat = torch.zeros((batch_size, max_len_batch, dim),
                                  dtype=torch.float32)
 
@@ -71,41 +97,31 @@ def collate_var_len_seq(
     return mask, data_batch_mat, batch_idx
 
 
-def draw_mini_batch(
-    batch_size: int,
-    indptr: npt.ArrayLike,
-    data: npt.ArrayLike,
-    device: str = 'cpu'
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def compute_global_mean_cov(
+    hf: h5py.File,
+    chunk_size: int=1024,
+    verbose: bool=False
+) -> dict[str, npt.ArrayLike]:
     """
     """
-    # draw mini-batch
-    batch_idx = np.random.choice(len(indptr) - 1, batch_size, False)
+    n = hf['data'].shape[0]
+    x_sum = 0.
+    xx_sum = 0.
+    n_chunks = n // chunk_size + (n % chunk_size != 0)
+    with tqdm(total=n_chunks, ncols=80, disable=not verbose) as prog:
+        for i in range(n_chunks):
+            x = hf['data'][i*chunk_size:(i+1)*chunk_size]
+            x_sum += x.sum(0)
+            xx_sum += x.T @ x
+            prog.update()
+        mean = x_sum / n
+        cov = xx_sum / n - np.outer(mean, mean)
+        prec = np.linalg.inv(cov)
+        prec_chol = np.linalg.cholesky(prec)
 
-    # slice the batch
-    indptr_batch = [0]
-    data_batch = []
-    for j in batch_idx:
-        j0, j1 = indptr[j], indptr[j+1]
-        indptr_batch.append(indptr_batch[-1] + j1 - j0)
-        data_batch.append(data[j0:j1])
-    data_batch = np.concatenate(data_batch)
-
-    indptr_batch_tch = torch.as_tensor(indptr_batch,
-                                       dtype=torch.int64,
-                                       device=device)
-    data_batch_tch = torch.as_tensor(data_batch,
-                                     dtype=torch.float32,
-                                     device=device)
-
-    max_len = max(indptr_batch_tch[1:] - indptr_batch_tch[:-1])
-    mask = torch.zeros((batch_size, max_len), dtype=torch.bool,
-                       device=device)
-    data_batch_mat = torch.zeros((batch_size, max_len, data.shape[-1]),
-                                 dtype=torch.float32, device=device)
-    for j in range(batch_size):
-        j0, j1 = indptr_batch_tch[j], indptr_batch_tch[j+1]
-        mask[j, :j1-j0] = 1.
-        data_batch_mat[j, :j1-j0] = data_batch_tch[j0:j1]
-
-    return mask, data_batch_mat, batch_idx
+    return {
+        'mean': mean,
+        'cov': cov,
+        'precision': prec,
+        'precision_cholesky': prec_chol
+    }
