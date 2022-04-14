@@ -34,6 +34,28 @@ class HDPGMM_GPU:
     whiten_params: Optional[dict[str, npt.ArrayLike]] = None
 
 
+def lnB(
+    W: torch.Tensor,
+    nu: float,
+    logdet_W: Optional[float] = None
+) -> float:
+    """
+    """
+    d = W.shape[0]
+    range_d = torch.arange(d).to(W.device)
+    if logdet_W is None:
+        sign, logdet_W = torch.linalg.slogdet(W)
+        if sign <= 0:
+            raise ValueError('[ERROR] log det of W must be positive!')
+
+    return (
+        -.5 * nu * logdet_W
+        -.5 * nu * d * _LOG_2.to(W.device)
+        -.25 * d * (d - 1) * _LOG_PI.to(W.device)
+        -torch.special.gammaln(.5 * (nu - range_d)).sum()
+    )
+
+
 def compute_ln_p_phi_x(
     data_batch: torch.Tensor,
     m: torch.Tensor,
@@ -63,26 +85,64 @@ def compute_ln_p_phi_x(
     return Eq_eta
 
 
-def lnB(
-    W: torch.Tensor,
-    nu: float,
-    logdet_W: Optional[float] = None
-) -> float:
+def compute_corpus_stick(
+    max_components_corpus: int,
+    params: dict[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
     """
     """
-    d = W.shape[0]
-    range_d = torch.arange(d).to(W.device)
-    if logdet_W is None:
-        sign, logdet_W = torch.linalg.slogdet(W)
-        if sign <= 0:
-            raise ValueError('[ERROR] log det of W must be positive!')
+    K = max_components_corpus
+    corpus_stick = {}
 
-    return (
-        -.5 * nu * logdet_W
-        -.5 * nu * d * _LOG_2.to(W.device)
-        -.25 * d * (d - 1) * _LOG_PI.to(W.device)
-        -torch.special.gammaln(.5 * (nu - range_d)).sum()
+    uv_sum = torch.digamma(params['u'] + params['v'])
+    corpus_stick['Eq_ln_beta_hat'] = torch.digamma(params['u']) - uv_sum
+    corpus_stick['Eq_ln_1_min_beta_hat'] = torch.digamma(params['v']) - uv_sum
+    corpus_stick['Eq_ln_beta'] = torch.zeros((K,), device=params['u'].device)
+    corpus_stick['Eq_ln_beta'][:K-1] = corpus_stick['Eq_ln_beta_hat']
+    corpus_stick['Eq_ln_beta'][1:] += torch.cumsum(
+        corpus_stick['Eq_ln_1_min_beta_hat'],
+        dim=0
     )
+
+    gamma = params['y'][0] / params['y'][1]
+    corpus_stick['Eq_ln_p_beta'] = (
+        (gamma - 1.) * corpus_stick['Eq_ln_1_min_beta_hat'].sum()
+        - (K - 1.) * torch.log(gamma)
+    )
+    corpus_stick['Eq_ln_q_beta'] = (
+        (params['u'] - 1.) * corpus_stick['Eq_ln_beta_hat']
+        + (params['v'] - 1) * corpus_stick['Eq_ln_1_min_beta_hat']
+        - (torch.special.gammaln(params['u'])
+           + torch.special.gammaln(params['v'])
+           - torch.special.gammaln(params['u'] + params['v']))
+    ).sum()
+
+    return corpus_stick
+
+
+def compute_document_stick(
+    max_components_document: int,
+    a: torch.Tensor,
+    b: torch.Tensor
+) -> dict[str, torch.Tensor]:
+    """
+    """
+    M = a.shape[0]  # batch_size
+    T = max_components_document
+    doc_stick = {}
+    doc_stick['Eq_ln_pi'] = torch.empty((M, T), device=a.device)
+
+    ab_sum = torch.digamma(a + b)
+    doc_stick['Eq_ln_pi_hat'] = torch.digamma(a) - ab_sum
+    doc_stick['Eq_ln_1_min_pi_hat'] = torch.digamma(b) - ab_sum
+    doc_stick['Eq_ln_1_min_pi_hat_cumsum'] = (
+        torch.cumsum(doc_stick['Eq_ln_1_min_pi_hat'], dim=1)
+    )
+    doc_stick['Eq_ln_pi'][:] = 0.
+    doc_stick['Eq_ln_pi'][:, :T-1] = doc_stick['Eq_ln_pi_hat']
+    doc_stick['Eq_ln_pi'][:, 1:] += doc_stick['Eq_ln_1_min_pi_hat_cumsum']
+
+    return doc_stick
 
 
 def compute_normalwishart_probs(
@@ -145,104 +205,106 @@ def e_step(
     data_batch: torch.Tensor,
     mask_batch: torch.BoolTensor,
     Eq_eta_batch: torch.Tensor,
-    zeta: torch.Tensor,
-    varphi: torch.Tensor,
-    w_: torch.Tensor,
-    a: torch.Tensor,
-    b: torch.Tensor,
-    w: torch.Tensor,
-    w2: torch.Tensor,
-    s1: float,
-    s2: float,
-    Eq_ln_beta: torch.Tensor,
+    params: dict[str, torch.Tensor],
+    temp_vars: dict[str, torch.Tensor],
+    corpus_stick: dict[str, torch.Tensor],
     share_alpha0: bool = True,
     e_step_tol: float = 1e-4,
     n_max_iter: int = 100,
-    eps: float = 1e-100
-) -> float:
+    noise_ratio: float = 1e-4,
+    chunk_size: int = 128,
+    eps: float = torch.finfo().eps
+) -> tuple[float,                     # mini-batch likelihood
+           dict[str, torch.Tensor]]:  # document stick latent vars inference
     """
     """
     M = data_batch.shape[0]
-    T = a.shape[1] + 1
-    Eq_ln_pi = torch.empty((M, T), device=Eq_eta_batch.device)
+    T = params['a'].shape[1] + 1
+    K = params['u'].shape[0] + 1
 
-    cur_alpha0 = w2[0] / w2[1]
+    cur_alpha0 = params['w2'][0] / params['w2'][1]
     ii = 0
     ln_lik = -torch.finfo().max
     converge = 1.
     old_ln_lik = -torch.finfo().max
     while (converge > 0. or converge > e_step_tol) and ii <= n_max_iter:
 
-        a[batch_idx] = 1.
+        params['a'][batch_idx] = 1.
         if share_alpha0:
-            b[batch_idx] = cur_alpha0
+            params['b'][batch_idx] = cur_alpha0
         else:
-            b[batch_idx] = (w[batch_idx, 0] / w[batch_idx, 1])[:, None]
+            params['b'][batch_idx] = (
+                params['w'][batch_idx, 0] / params['w'][batch_idx, 1]
+            )[:, None]
 
-        varphi.copy_(
-            Eq_ln_beta[None, None]
-            + torch.bmm(zeta.permute(0, 2, 1), Eq_eta_batch)
+        temp_vars['varphi'].copy_(
+            corpus_stick['Eq_ln_beta'][None, None]
+            + torch.bmm(temp_vars['zeta'].permute(0, 2, 1), Eq_eta_batch)
         )
-        varphi -= torch.logsumexp(varphi, dim=-1)[:, :, None]
-        a[batch_idx] += zeta[:, :, :-1].sum(1)
-        b[batch_idx] += (
+        temp_vars['varphi'] -= torch.logsumexp(temp_vars['varphi'], dim=-1)[:, :, None]
+        params['a'][batch_idx] += temp_vars['zeta'][:, :, :-1].sum(1)
+        params['b'][batch_idx] += (
             torch.flip(
                 torch.cumsum(
-                    torch.sum(torch.flip(zeta, dims=(2,)), dim=1),
+                    torch.sum(torch.flip(temp_vars['zeta'], dims=(2,)), dim=1),
                     dim=1
                 ),
                 dims=(1,)
             )[:, 1:]
         )
 
-        ab_sum = torch.digamma(a[batch_idx] + b[batch_idx])
-        Eq_ln_pi_hat = torch.digamma(a[batch_idx]) - ab_sum
-        Eq_ln_1_min_pi_hat = torch.digamma(b[batch_idx]) - ab_sum
-        Eq_ln_1_min_pi_hat_cumsum = torch.cumsum(Eq_ln_1_min_pi_hat, dim=1)
-        Eq_ln_pi[:] = 0.
-        Eq_ln_pi[:, :T-1] = Eq_ln_pi_hat
-        Eq_ln_pi[:, 1:] += Eq_ln_1_min_pi_hat_cumsum
-
-        zeta.copy_(
-            Eq_ln_pi[:,None]
-            + torch.bmm(Eq_eta_batch, torch.exp(varphi).permute(0, 2, 1))
+        doc_stick = compute_document_stick(
+            T,
+            params['a'][batch_idx],
+            params['b'][batch_idx]
         )
-        zeta -= torch.logsumexp(zeta, dim=-1)[:, :, None]
-        torch.exp(zeta, out=zeta)
-        torch.clamp(zeta, min=eps, out=zeta)
-        # zeta *= mask_batch[:, :, None]
 
-        w[batch_idx, 0] = s1 + T - 1
-        w[batch_idx, 1] = s2 - Eq_ln_1_min_pi_hat_cumsum[:, -1]
+        temp_vars['zeta'].copy_(
+            doc_stick['Eq_ln_pi'][:,None]
+            + torch.bmm(Eq_eta_batch,
+                        torch.exp(temp_vars['varphi']).permute(0, 2, 1))
+        )
+        temp_vars['zeta'] -= torch.logsumexp(temp_vars['zeta'], dim=-1)[:, :, None]
+        torch.exp(temp_vars['zeta'], out=temp_vars['zeta'])
+        torch.clamp(temp_vars['zeta'], min=eps, out=temp_vars['zeta'])
+        # temp_vars['zeta'] *= mask_batch[:, :, None]
+
+        params['w'][batch_idx, 0] = params['s1'] + T - 1
+        params['w'][batch_idx, 1] = params['s2'] - doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1]
 
         Eq_ln_q_pi = (
-            (a[batch_idx] - 1.) * Eq_ln_pi_hat
-            + (b[batch_idx] - 1.) * Eq_ln_1_min_pi_hat
-            - torch.special.gammaln(a[batch_idx]) - torch.special.gammaln(b[batch_idx])
-            + torch.special.gammaln(a[batch_idx] + b[batch_idx])
+            (params['a'][batch_idx] - 1.) * doc_stick['Eq_ln_pi_hat']
+            + (params['b'][batch_idx] - 1.) * doc_stick['Eq_ln_1_min_pi_hat']
+            - torch.special.gammaln(params['a'][batch_idx])
+            - torch.special.gammaln(params['b'][batch_idx])
+            + torch.special.gammaln(params['a'][batch_idx] + params['b'][batch_idx])
         )
 
         if share_alpha0:
             alpha0 = cur_alpha0
         else:
-            alpha0 = w[batch_idx, 0] / w[batch_idx, 1]
+            alpha0 = params['w'][batch_idx, 0] / params['w'][batch_idx, 1]
 
         Eq_ln_p_pi = (
-            (alpha0 - 1.) * Eq_ln_1_min_pi_hat_cumsum[:, -1]
+            (alpha0 - 1.) * doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1]
             - (T - 1.) * torch.log(alpha0)
         )
 
+        exp_varphi = torch.exp(temp_vars['varphi'])
         ln_p_z = 0.
         Eq_ln_pz = 0.
-        Eq_ln_pc = (torch.exp(varphi) @ Eq_ln_beta).sum()
+        Eq_ln_pc = (exp_varphi @ corpus_stick['Eq_ln_beta']).sum()
         Eq_ln_qzqc = (
-            (torch.exp(varphi) * varphi).sum()
-            + torch.masked_select(zeta * zeta.log(), mask_batch[..., None]).sum()
+            (exp_varphi * temp_vars['varphi']).sum()
+            + torch.masked_select(temp_vars['zeta'] * temp_vars['zeta'].log(),
+                                  mask_batch[..., None]).sum()
         )
-        ln_p_z += torch.masked_select(zeta * torch.bmm(Eq_eta_batch,
-                                                       torch.exp(varphi).permute(0, 2, 1)),
-                                      mask_batch[..., None]).sum()
-        Eq_ln_pz += torch.bmm(zeta, Eq_ln_pi[:, :, None]).sum()
+        ln_p_z += torch.masked_select(
+            temp_vars['zeta'] * torch.bmm(Eq_eta_batch,
+                                          exp_varphi.permute(0, 2, 1)),
+            mask_batch[..., None]
+        ).sum()
+        Eq_ln_pz += torch.bmm(temp_vars['zeta'], doc_stick['Eq_ln_pi'][:, :, None]).sum()
 
         # compute likelihood
         ln_lik = (
@@ -256,64 +318,27 @@ def e_step(
         # update counter
         ii += 1
 
-    # update w tmp cumulator
-    w_[0] = (T - 1.) * len(batch_idx)
-    w_[1] = Eq_ln_1_min_pi_hat_cumsum[:, -1].sum(0)
+    # update necessary statistics cumulators
+    # -- update w tmp cumulator
+    params['ss']['w_'][0] = (T - 1.) * len(batch_idx)
+    params['ss']['w_'][1] = doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1].sum(0)
 
-    return ln_lik
-
-
-def m_step(
-    data_batch: torch.Tensor,
-    mask_batch: torch.Tensor,
-    n_total_docs: int,
-    m: torch.Tensor,
-    C: torch.Tensor,
-    nu: torch.Tensor,
-    beta: torch.Tensor,
-    zeta: torch.Tensor,
-    varphi: torch.Tensor,
-    w_: torch.Tensor,
-    a: torch.Tensor,
-    b: torch.Tensor,
-    w: torch.Tensor,
-    w2: torch.Tensor,
-    u: torch.Tensor,
-    v: torch.Tensor,
-    y: torch.Tensor,
-    Eq_ln_1_min_beta_hat: torch.Tensor,
-    m0: torch.Tensor,
-    W0_inv: torch.Tensor,
-    nu0: float,
-    beta0: float,
-    s1: float,
-    s2: float,
-    g1: float,
-    g2: float,
-    noise_ratio: float,
-    chunk_size: int = 128,
-    eps: float = 1e-100
-):
-    """
-    """
-    M, max_len, D = data_batch.shape
-    J = n_total_docs
-    N_b, T, K = varphi.shape
-
-    x_bar = torch.zeros((K, D), dtype=torch.float32, device=data_batch.device)
-    S = torch.zeros((K, D, D), dtype=torch.float32, device=data_batch.device)
-    N = torch.zeros((K,), dtype=torch.float32, device=data_batch.device)
-
+    # -- update N / x_bar / S
     # for memory efficiency, we do the chunking here
     n_chunks = M // chunk_size + (M % chunk_size != 0)
     for i in range(n_chunks):
+        # chunk varibales
         slc = slice(i * chunk_size, (i+1) * chunk_size)
-        zeta_chunk = zeta[slc]
+        zeta_chunk = temp_vars['zeta'][slc]
+        # varphi_chunk = temp_vars['varphi'][slc]
+        exp_varphi_chunk = exp_varphi[slc]
         data_chunk = data_batch[slc]
         mask_chunk = mask_batch[slc].float()
-        varphi_chunk = varphi[slc]
-        r = zeta_chunk @ torch.clamp(torch.exp(varphi_chunk), min=eps)
 
+        # compute responsibility
+        r = zeta_chunk @ torch.clamp(exp_varphi_chunk, min=eps)
+
+        # splash noise if needed
         if noise_ratio > 0:
             norm = r.sum(-1)
             r /= torch.clamp(norm[:, :, None], min=eps)
@@ -324,55 +349,77 @@ def m_step(
             r += e * noise_ratio
             r *= norm[:, :, None] * mask_chunk[:, :, None]
 
-        N += r.sum((0, 1))
+        params['ss']['N'] += r.sum((0, 1))
         for k in range(K):
-            x_bar[k] += torch.bmm(r[:, :, k][:, None], data_chunk).sum(0)[0]
+            params['ss']['x_bar'][k] += torch.bmm(r[:, :, k][:, None],
+                                                  data_chunk).sum(0)[0]
             rx = r[:, :, k][:, :, None]**.5 * data_chunk
-            S[k] += torch.bmm(rx.permute(0, 2, 1), rx).sum(0)
+            params['ss']['S'][k] += torch.bmm(rx.permute(0, 2, 1), rx).sum(0)
 
-    u_ = torch.exp(varphi[:, :, :-1]).sum((0, 1))
-    v_ = torch.flip(
+    params['ss']['u_'] += exp_varphi[:, :, :-1].sum((0, 1))
+    params['ss']['v_'] = torch.flip(
         torch.cumsum(
-            torch.sum(torch.flip(torch.exp(varphi), dims=(2,)), dim=(0, 1)),
+            torch.sum(torch.flip(exp_varphi, dims=(2,)), dim=(0, 1)),
             dim=0
         ),
         dims=(0,)
     )[1:]
 
+    return ln_lik, doc_stick
+
+
+def m_step(
+    batch_size: int,
+    n_total_docs: int,
+    params: dict[str, torch.Tensor],
+    corpus_stick: dict[str, torch.Tensor],
+    eps: float = torch.finfo().eps
+):
+    """
+    """
+    J = n_total_docs
+    M = batch_size
+    K = params['u'].shape[0] + 1
+
     # batch weight
     batch_w = float(J / M)
 
     # update alpha0
-    w2[0] = s1 + w_[0] * batch_w
-    w2[1] = s2 - w_[1] * batch_w
+    params['w2'][0] = params['s1'] + params['ss']['w_'][0] * batch_w
+    params['w2'][1] = params['s2'] - params['ss']['w_'][1] * batch_w
 
     # update gamma
-    y[0] = g1 + K - 1
-    y[1] = g2 - Eq_ln_1_min_beta_hat.sum()
-    gamma = y[0] / y[1]
+    params['y'][0] = params['g1'] + K - 1
+    params['y'][1] = params['g2'] - corpus_stick['Eq_ln_1_min_beta_hat'].sum()
+    gamma = params['y'][0] / params['y'][1]
 
     # update beta
-    u[:] = 1. + u_ * batch_w
-    v[:] = gamma + v_ * batch_w
+    params['u'][:] = 1. + params['ss']['u_'] * batch_w
+    params['v'][:] = gamma + params['ss']['v_'] * batch_w
 
     # update Gaussian-Wishart
-    N = N * batch_w
+    N = params['ss']['N'] * batch_w
     for k in range(K):
         N_k = max(N[k], eps)
-        nu[k] = nu0 + N_k
-        beta[k] = beta0 + N_k
+        params['nu'][k] = params['nu0'] + N_k
+        params['beta'][k] = params['beta0'] + N_k
 
-        x_bar_k = x_bar[k] * batch_w / N_k
-        S_k = S[k] * batch_w / N_k - torch.outer(x_bar_k, x_bar_k)
+        x_bar_k = params['ss']['x_bar'][k] * batch_w / N_k
+        xx_bar_k = torch.outer(x_bar_k, x_bar_k)
+        S_k = params['ss']['S'][k] * batch_w / N_k - xx_bar_k
 
-        m[k] = beta[k]**-1 * (beta0 * m0 + N_k * x_bar_k)
+        params['m'][k] = (
+            params['beta'][k]**-1
+            * (params['beta0'] * params['m0'] + N_k * x_bar_k)
+        )
 
-        dev = (x_bar_k - m0)
-        C[k] = (
-            W0_inv
+        dev = (x_bar_k - params['m0'])
+        dev2 = torch.outer(dev, dev)
+        params['C'][k] = (
+            params['W0_inv']
             + N_k * S_k
-            + beta0 * N_k / (beta0 + N_k) * torch.outer(dev, dev)
-        ) / nu[k]
+            + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
+        ) / params['nu'][k]
 
 
 def update_parameters(
@@ -382,11 +429,12 @@ def update_parameters(
     batch_size: int,
     params: dict[str, torch.Tensor],
     old_params: dict[str, torch.Tensor],
+    batch_update: bool = False,
     corpus_level_params: set[str] = CORPUS_LEVEL_PARAMS
 ):
     """
     """
-    if batch_size <= 0:
+    if batch_size <= 0 or batch_update:
         rho = 1.
     else:
         rho = (tau0 + cur_iter)**-kappa
@@ -595,6 +643,8 @@ def _init_params(
 
     # prep the containor
     params = {}
+
+    # init main parameters
     params['m'] = torch.as_tensor(m, dtype=torch.float32, device=device)
     params['C'] = torch.as_tensor(C, dtype=torch.float32, device=device)
     params['beta'] = torch.as_tensor(beta, dtype=torch.float32, device=device)
@@ -606,9 +656,10 @@ def _init_params(
     params['b'] = torch.as_tensor(b, dtype=torch.float32, device=device)
     params['w'] = torch.as_tensor(w, dtype=torch.float32, device=device)
     params['w2'] = torch.as_tensor(w2, dtype=torch.float32, device=device)
-    params['w_cumul'] = torch.zeros((2,), dtype=torch.float32, device=device)
     params['W_chol'] = torch.as_tensor(W_chol, dtype=torch.float32, device=device)
     params['W_logdet'] = torch.as_tensor(W_logdet, dtype=torch.float32, device=device)
+
+    # copying (wrapping to torch Tensors) hyper-priors
     params['m0'] = torch.as_tensor(m0, dtype=torch.float32, device=device)
     params['W0'] = torch.as_tensor(W0, dtype=torch.float32, device=device)
     params['W0_inv'] = torch.linalg.inv(params['W0'])
@@ -618,6 +669,17 @@ def _init_params(
     params['s2'] = s2
     params['g1'] = g1
     params['g2'] = g2
+
+    # initializing buffers for the sufficient statistics
+    params['ss'] = {}
+    params['ss']['x_bar'] = torch.zeros((K, D), dtype=torch.float32, device=device)
+    params['ss']['S'] = torch.zeros((K, D, D), dtype=torch.float32, device=device)
+    params['ss']['N'] = torch.zeros((K,), dtype=torch.float32, device=device)
+    params['ss']['w_'] = torch.zeros((2,), dtype=torch.float32, device=device)
+    params['ss']['u_'] = torch.zeros((K - 1,), dtype=torch.float32, device=device)
+    params['ss']['v_'] = torch.zeros((K - 1,), dtype=torch.float32, device=device)
+
+    # wrapping the model fits and others states
     params['mean_holdout_perplexity'] = mean_holdout_probs
     params['training_lowerbound'] = train_lik
     params['start_iter'] = start_iter
@@ -682,12 +744,44 @@ def init_params(
     return params, old_params
 
 
+def init_temp_vars(
+    max_components_corpus: int,
+    max_components_document: int,
+    data_batch: torch.Tensor,
+    mask_batch: torch.BoolTensor
+) -> dict[str, torch.Tensor]:
+    """
+    initialize & allocate the temporary variables
+        mostly including latent variables (i.e., zeta / varphi)
+    """
+    M, max_len, D = data_batch.shape
+    K = max_components_corpus
+    T = max_components_document
+    device = data_batch.device
+
+    tmp_vars = {}
+    tmp_vars['varphi'] = torch.zeros((M, T, K),
+                                     dtype=data_batch.dtype,
+                                     device=device)
+    tmp_vars['zeta'] = torch.rand(M, max_len, T).to(device)
+    tmp_vars['zeta'] /= tmp_vars['zeta'].sum(-1)[:, :, None]
+    tmp_vars['zeta'] *= mask_batch[:, :, None]
+    return tmp_vars
+
+
+def reinit_ss(
+    params: dict[str, torch.Tensor]
+) -> None:
+    """
+    """
+    for k in params['ss'].keys():
+        params['ss'][k][:] = 0.
+
+
 def package_model(
     max_components_corpus: int,
     max_components_document: int,
     params: dict[str, torch.Tensor],
-    mean_holdout_probs: list[float],
-    train_lik: list[float],
     share_alpha0: bool = False
 ) -> dict[str, HDPGMM_GPU]:
     """
@@ -710,14 +804,131 @@ def package_model(
             params['beta0'],
             params['nu0'],
             params['s1'], params['s2'], params['g1'], params['g2'],
-            mean_holdout_probs, train_lik, share_alpha0
+            params['mean_holdout_perplexity'],
+            params['training_lowerbound'],
+            share_alpha0
         ),
         whiten_params = params.get('whiten_params')
     )
     return pkg
 
 
-# def infer_document():
+def infer_documents(
+    dataset: HDFMultiVarSeqDataset,
+    model: HDPGMM_GPU,
+    n_max_inner_iter: int = 100,
+    e_step_tol: float = 1e-4,
+    batch_size: int = 512,
+    device: str = 'cpu',
+    max_len: int = torch.iinfo(torch.int32).max,
+    eps: float = torch.finfo().eps
+) -> dict[str, torch.Tensor]:
+    """
+    """
+    K = model.hdpgmm.max_components_corpus
+    T = model.hdpgmm.max_components_document
+    if isinstance(model.hdpgmm.variational_params[3], list):
+        share_alpha0 = False
+    else:
+        share_alpha0 = True
+
+    # setup data loader
+    loader = DataLoader(
+        dataset,
+        num_workers=0,
+        collate_fn=partial(collate_var_len_seq, max_len=max_len),
+        batch_size=batch_size,
+        shuffle=False
+    )
+
+    # unpack model
+    params = init_params(
+        K, T, loader, device,
+        warm_start_with=model
+    )[0]
+
+    # infer documents
+    n_samples = len(loader.dataset)
+    ln_lik_ = torch.empty((n_samples, K), device=device)
+    # ln_prior_ = torch.empty_like(ln_lik_)
+    Eq_ln_pi_ = torch.empty_like((n_samples, T), device=device)
+    for mask_batch, data_batch, batch_idx in loader:
+
+        # send tensors to the target device
+        mask_batch = mask_batch.to(device)
+        data_batch = data_batch.to(device)
+        batch_idx = batch_idx.to(device)
+
+        with torch.no_grad():
+
+            # init some variables
+            # and re-init including accumulators for sufficient statistics
+            temp_vars = init_temp_vars(K, T, data_batch, mask_batch)
+            reinit_ss(params)
+
+            # compute Eq_beta and probability
+            corpus_stick = compute_corpus_stick(K, params)
+
+            # COMPUTE Eq[eta]
+            Eq_eta = compute_ln_p_phi_x(
+                data_batch,
+                params['m'],
+                params['W_chol'],
+                params['W_logdet'],
+                params['beta'],
+                params['nu']
+            )
+
+            # DO E-STEP AND COMPUTE BATCH LIKELIHOOD
+            ln_lik, doc_stick_batch = e_step(
+                batch_idx, data_batch, mask_batch,
+                Eq_eta, params, temp_vars, corpus_stick,
+                share_alpha0 = share_alpha0,
+                e_step_tol = e_step_tol,
+                n_max_iter = n_max_inner_iter,
+                noise_ratio = 0.,
+                eps = eps
+            )
+
+            # free up some big variables to save mem
+            del Eq_eta
+            del temp_vars['zeta']
+            del temp_vars['varphi']
+            torch.cuda.empty_cache()
+
+            # compute the mean log-likelihood
+            Eq_eta *= mask_batch[:, :, None]
+            ln_lik_[batch_idx] = (
+                torch.logsumexp(Eq_eta, dim=1)
+                - mask_batch.sum(1)[:, None].log()
+            )
+            Eq_ln_pi_[batch_idx] = doc_stick_batch['Eq_ln_pi']
+
+    return {
+        'Eq_ln_eta': ln_lik_,
+        'Eq_ln_pi': Eq_ln_pi_
+    }
+
+
+def save_state(
+    max_components_corpus: int,
+    max_components_document: int,
+    params: dict[str, torch.Tensor],
+    share_alpha0: bool,
+    out_path: str,
+    prefix: str,
+    it: int  # number of iteration so far
+):
+    """
+    """
+    ret = package_model(
+        max_components_corpus,
+        max_components_document,
+        params, share_alpha0
+    )
+    path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
+    with path.open('wb') as fp:
+        pkl.dump(ret, fp)
 
 
 def variational_inference(
@@ -728,6 +939,7 @@ def variational_inference(
     batch_size: int = 512,
     kappa: float = .5,
     tau0: float = 1.,
+    batch_update: bool = False,
     m0: Optional[npt.NDArray[np.float64]] = None,
     W0: Optional[npt.NDArray[np.float64]] = None,
     nu0: Optional[float] = None,
@@ -786,12 +998,13 @@ def variational_inference(
     #######################
     # Update loop!
     #######################
-    trn_liks = params['training_lowerbound']
-    mean_holdout_probs = params['mean_holdout_perplexity']
     it = params['start_iter']
     try:
         with tqdm(total=n_epochs, ncols=80, disable=not verbose) as prog:
             for _ in range(n_epochs):
+                if batch_update:
+                    reinit_ss(params)
+
                 for mask_batch, data_batch, batch_idx in loader:
 
                     # send tensors to the target device
@@ -801,38 +1014,22 @@ def variational_inference(
 
                     with torch.no_grad():
 
-                        # init some variables (including accumulators?)
-                        varphi = torch.zeros((data_batch.shape[0],
-                                              max_components_document,
-                                              max_components_corpus),
-                                             device=data_batch.device)
-                        zeta = torch.rand(data_batch.shape[0],
-                                          data_batch.shape[1],
-                                          max_components_document).to(device)
-                        zeta /= zeta.sum(2)[:, :, None]
-                        zeta *= mask_batch[:, :, None]
+                        # init some variables
+                        # and re-init including accumulators for sufficient statistics
+                        temp_vars = init_temp_vars(
+                            max_components_corpus,
+                            max_components_document,
+                            data_batch,
+                            mask_batch
+                        )
+                        if not batch_update:
+                            reinit_ss(params)
 
                         # compute Eq_beta and probability
-                        uv_sum = torch.digamma(params['u'] + params['v'])
-                        Eq_ln_beta_hat = torch.digamma(params['u']) - uv_sum
-                        Eq_ln_1_min_beta_hat = torch.digamma(params['v']) - uv_sum
-                        Eq_ln_beta = torch.zeros((max_components_corpus,),
-                                                 device=data_batch.device)
-                        Eq_ln_beta[:max_components_corpus-1] = Eq_ln_beta_hat
-                        Eq_ln_beta[1:] += torch.cumsum(Eq_ln_1_min_beta_hat, dim=0)
-
-                        gamma = params['y'][0] / params['y'][1]
-                        Eq_ln_p_beta = (
-                            (gamma - 1.) * Eq_ln_1_min_beta_hat.sum()
-                            - (max_components_corpus - 1.) * torch.log(gamma)
+                        corpus_stick = compute_corpus_stick(
+                            max_components_corpus,
+                            params
                         )
-                        Eq_ln_q_beta = (
-                            (params['u'] - 1.) * Eq_ln_beta_hat
-                            + (params['v'] - 1) * Eq_ln_1_min_beta_hat
-                            - (torch.special.gammaln(params['u'])
-                               + torch.special.gammaln(params['v'])
-                               - torch.special.gammaln(params['u'] + params['v']))
-                        ).sum()
 
                         # COMPUTE Eq[eta]
                         Eq_eta = compute_ln_p_phi_x(
@@ -843,18 +1040,18 @@ def variational_inference(
                             params['beta'],
                             params['nu']
                         )
+
                         # DO E-STEP AND COMPUTE BATCH LIKELIHOOD
+                        noise_ratio = base_noise_ratio * 1000. / (it + 1000.)
                         ln_lik = e_step(
                             batch_idx, data_batch, mask_batch,
-                            Eq_eta, zeta, varphi, params['w_cumul'],
-                            params['a'], params['b'], params['w'], params['w2'],
-                            s1=params['s1'], s2=params['s2'],
-                            Eq_ln_beta = Eq_ln_beta,
+                            Eq_eta, params, temp_vars, corpus_stick,
                             share_alpha0 = share_alpha0,
                             e_step_tol = e_step_tol,
                             n_max_iter = n_max_inner_iter,
-                            eps=eps
-                        )
+                            noise_ratio = noise_ratio,
+                            eps = eps
+                        )[0]
 
                         # COMPUTE LOWERBOUNDS
                         ln_lik *= len(dataset) / data_batch.shape[0]  # est. for the total lik
@@ -866,58 +1063,77 @@ def variational_inference(
                             params['nu0'], params['beta0']
                         )
                         total_ln_lik_est = (
-                            ln_lik + Eq_ln_p_beta - Eq_ln_q_beta + nw_prob
-                        )
-                        trn_liks.append(total_ln_lik_est.item())
+                            ln_lik
+                            + corpus_stick['Eq_ln_p_beta']
+                            - corpus_stick['Eq_ln_q_beta']
+                            + nw_prob
+                        ).item()
+                        params['training_lowerbound'].append(total_ln_lik_est)
 
-                        # DO M-STEP
-                        noise_ratio = base_noise_ratio * 1000. / (it + 1000.)
-                        m_step(
-                            data_batch, mask_batch, len(dataset),
-                            params['m'], params['C'],
-                            params['nu'], params['beta'],
-                            zeta, varphi, params['w_cumul'],
-                            params['a'], params['b'], params['w'], params['w2'],
-                            params['u'], params['v'], params['y'],
-                            Eq_ln_1_min_beta_hat,
-                            params['m0'], params['W0_inv'],
-                            params['nu0'], params['beta0'],
-                            params['s1'], params['s2'],
-                            params['g1'], params['g2'],
-                            noise_ratio = noise_ratio,
-                            eps = eps
-                        )
+                        if not batch_update:
+                            # DO M-STEP
+                            m_step(
+                                batch_size, len(dataset),
+                                params, corpus_stick, eps
+                            )
 
-                        # UPDATE NEW PARAMETERS
-                        update_parameters(
-                            cur_iter=it,
-                            tau0=tau0,
-                            kappa=kappa,
-                            batch_size=batch_size,
-                            params=params,
-                            old_params=old_params
-                        )
+                            # UPDATE NEW PARAMETERS
+                            update_parameters(
+                                cur_iter=it,
+                                tau0=tau0,
+                                kappa=kappa,
+                                batch_size=batch_size,
+                                params=params,
+                                old_params=old_params,
+                                batch_update=batch_update
+                            )
 
                         # free up some big variables to save mem
                         del Eq_eta
-                        del zeta
-                        del varphi
+                        del temp_vars['zeta']
+                        del temp_vars['varphi']
                         torch.cuda.empty_cache()
 
-                        if save_every is not None and it % save_every == 0:
-                            ret = package_model(
-                                max_components_corpus,
-                                max_components_document,
-                                params,
-                                mean_holdout_probs,
-                                trn_liks,
-                                share_alpha0
+                        if (
+                            (save_every is not None) and
+                            (save_every != 'epoch') and
+                            (it % save_every == 0)
+                        ):
+                            save_state(
+                               max_components_corpus,
+                               max_components_document,
+                               params, share_alpha0,
+                               out_path, prefix, it
                             )
-                            path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
-                            with path.open('wb') as fp:
-                                pkl.dump(ret, fp)
 
                     it += 1
+
+                if batch_update:
+                    # DO M-STEP
+                    m_step(
+                        batch_size, len(dataset),
+                        params, corpus_stick, eps
+                    )
+
+                    # UPDATE NEW PARAMETERS
+                    update_parameters(
+                        cur_iter=it,
+                        tau0=tau0,
+                        kappa=kappa,
+                        batch_size=batch_size,
+                        params=params,
+                        old_params=old_params,
+                        batch_update=batch_update
+                    )
+
+                    if save_every == 'epoch':
+                        save_state(
+                           max_components_corpus,
+                           max_components_document,
+                           params, share_alpha0,
+                           out_path, prefix, it
+                        )
+
                 prog.update()
 
     except KeyboardInterrupt as ke:
@@ -929,9 +1145,6 @@ def variational_inference(
     ret = package_model(
         max_components_corpus,
         max_components_document,
-        params,
-        mean_holdout_probs,
-        trn_liks,
-        share_alpha0
+        params, share_alpha0
     )
     return ret
