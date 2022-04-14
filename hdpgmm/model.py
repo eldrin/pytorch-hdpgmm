@@ -9,7 +9,7 @@ import numpy.typing as npt
 from scipy.special import digamma
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from tqdm import tqdm
 
@@ -267,7 +267,7 @@ def e_step(
         temp_vars['zeta'] -= torch.logsumexp(temp_vars['zeta'], dim=-1)[:, :, None]
         torch.exp(temp_vars['zeta'], out=temp_vars['zeta'])
         torch.clamp(temp_vars['zeta'], min=eps, out=temp_vars['zeta'])
-        # temp_vars['zeta'] *= mask_batch[:, :, None]
+        temp_vars['zeta'] *= mask_batch[:, :, None]
 
         params['w'][batch_idx, 0] = params['s1'] + T - 1
         params['w'][batch_idx, 1] = params['s2'] - doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1]
@@ -304,7 +304,10 @@ def e_step(
                                           exp_varphi.permute(0, 2, 1)),
             mask_batch[..., None]
         ).sum()
-        Eq_ln_pz += torch.bmm(temp_vars['zeta'], doc_stick['Eq_ln_pi'][:, :, None]).sum()
+        Eq_ln_pz += torch.masked_select(
+            torch.bmm(temp_vars['zeta'], doc_stick['Eq_ln_pi'][:, :, None]),
+            mask_batch[..., None]
+        ).sum()
 
         # compute likelihood
         ln_lik = (
@@ -373,13 +376,14 @@ def m_step(
     n_total_docs: int,
     params: dict[str, torch.Tensor],
     corpus_stick: dict[str, torch.Tensor],
+    cov_reg_weight: float = 1e-8,
     eps: float = torch.finfo().eps
 ):
     """
     """
     J = n_total_docs
     M = batch_size
-    K = params['u'].shape[0] + 1
+    K, D = params['m'].shape
 
     # batch weight
     batch_w = float(J / M)
@@ -399,6 +403,7 @@ def m_step(
 
     # update Gaussian-Wishart
     N = params['ss']['N'] * batch_w
+    cov_reg = cov_reg_weight * torch.eye(D, device=params['m'].device)
     for k in range(K):
         N_k = max(N[k], eps)
         params['nu'][k] = params['nu0'] + N_k
@@ -419,6 +424,7 @@ def m_step(
             params['W0_inv']
             + N_k * S_k
             + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
+            + cov_reg
         ) / params['nu'][k]
 
 
@@ -932,7 +938,7 @@ def save_state(
 
 
 def variational_inference(
-    h5_fn: str,
+    dataset: Dataset,
     max_components_corpus: int,
     max_components_document: int,
     n_epochs: int,
@@ -953,7 +959,6 @@ def variational_inference(
     base_noise_ratio: float = 1e-4,
     full_uniform_init: bool = True,
     share_alpha0: bool = True,
-    whiten: bool = False,
     data_parallel_num_workers: int = 0,
     n_W0_cluster: int = 128,
     cluster_frac: float = .01,
@@ -968,14 +973,12 @@ def variational_inference(
 ):
     """
     """
-    ###################
-    # Loading Dataset
-    ###################
+    ####################
+    # Setup Dataloader
+    ####################
     if warm_start_with and warm_start_with.whiten_params:
-        dataset = HDFMultiVarSeqDataset(h5_fn)
         dataset._whitening_params = warm_start_with.whiten_params
-    else:
-        dataset = HDFMultiVarSeqDataset(h5_fn, whiten=whiten)
+
     loader = DataLoader(
         dataset,
         num_workers=data_parallel_num_workers,

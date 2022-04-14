@@ -1,31 +1,70 @@
-from typing import Union, Optional
+from typing import Union, Optional, Callable
 from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
+import librosa
 
 import h5py
 from tqdm import tqdm
 
 import torch
 from torch.utils.data import Dataset
+import torchaudio
 
 
-class HDFMultiVarSeqDataset(Dataset):
-    def __init__(self,
-                 h5_fn: Union[str, Path],
-                 whiten: bool=False,
-                 chunk_size: int=1024,
-                 verbose: bool=False):
+class FeatureWhiteningMixin:
+    """
+    """
+    def _init_whitening(self):
         """
         """
-        self.h5_fn = h5_fn
-        self._hf = h5py.File(h5_fn, 'r')
+        # compute whitening parameters
+        self._whitening_params = compute_global_mean_cov(self._hf,
+                                                         self.chunk_size,
+                                                         self.verbose)
+
+class WhiteningDataset(Dataset, FeatureWhiteningMixin):
+    """
+    """
+    def __init__(
+        self,
+        whiten: bool = False,
+        chunk_size: int = 1024,
+        verbose: bool = False
+    ):
+        """
+        """
         self.whiten = whiten
         self.chunk_size = chunk_size
         self.verbose = verbose
+
         if whiten:
             self._init_whitening()
+
+    def apply_whitening(self, x):
+        """
+        """
+        if self.whiten:
+            x -= self._whitening_params['mean'][None]
+            x = x @ self._whitening_params['precision_cholesky']
+        return x
+
+
+class HDFMultiVarSeqDataset(WhiteningDataset):
+    def __init__(
+        self,
+        h5_fn: Union[str, Path],
+        whiten: bool=False,
+        chunk_size: int=1024,
+        verbose: bool=False
+    ):
+        """
+        """
+        super().__init__(whiten, chunk_size, verbose)
+
+        self.h5_fn = h5_fn
+        self._hf = h5py.File(h5_fn, 'r')
 
     def __del__(self):
         self._hf.close()
@@ -44,27 +83,59 @@ class HDFMultiVarSeqDataset(Dataset):
         x = self._hf['data'][j0:j1]
 
         # whiten, if needed
-        if self.whiten:
-            x -= self._whitening_params['mean'][None]
-            x = x @ self._whitening_params['precision_cholesky']
+        x = self.apply_whitening(x)
 
         # wrap to torch.Tensor
         x = torch.as_tensor(x, dtype=torch.float32)
 
         return (idx, x)
 
-    def _init_whitening(self):
+
+class AudioDataset(Dataset):
+    """
+    """
+    def __init__(
+        self,
+        audio_list_fn: Union[str, Path],
+        transform: Optional[Callable] = None,
+        chunk_size: int=1024,
+        verbose: bool=False
+    ):
         """
         """
-        # compute whitening parameters
-        self._whitening_params = compute_global_mean_cov(self._hf,
-                                                         self.chunk_size,
-                                                         self.verbose)
+        # load audio list
+        if isinstance(audio_list_fn, str):
+            audio_list_fn = Path(audio_list_fn)
+
+        with audio_list_fn.open() as fp:
+            self._audio_fns = [l.replace('\n', '') for l in fp]
+        self.audio_list_fn = audio_list_fn
+
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.audio_list_fn)
+
+    def __getitem__(
+        self,
+        idx: int
+    ) -> tuple[int, torch.Tensor]:
+        """
+        """
+        y, sr = torchaudio.load(self.audio_list_fn[idx])
+        if self.transform:
+            x = self.transform(y.numpy(), sr)
+
+        # wrap to torch.Tensor
+        x = torch.as_tensor(x, dtype=torch.float32)
+
+        return (idx, x)
 
 
 def collate_var_len_seq(
     samples: list[tuple[int, torch.Tensor]],
-    max_len: Optional[int] = None
+    max_len: Optional[int] = None,
+    min_len: Optional[int] = 128
 ) -> tuple[torch.BoolTensor,      # mask_batch
            torch.Tensor,      # data_batch
            torch.LongTensor]: # batch_idx
@@ -95,6 +166,53 @@ def collate_var_len_seq(
             data_batch_mat[j, :n] = x
 
     return mask, data_batch_mat, batch_idx
+
+
+def ext_feature(
+    y: npt.ArrayLike,
+    sr: int,
+    n_fft: int = 2048,
+    hop_length: int = 512,
+    n_mfcc: int = 13,
+    features: set[str] = {'mfcc', 'dmfcc', 'ddmfcc', 'chroma'}
+) -> npt.ArrayLike:
+    """
+    """
+    assert any([
+        feature not in {'mfcc', 'dmfcc', 'ddmfcc', 'chroma'}
+        for feature in features
+    ])
+    assert len(features) > 0
+
+    m = librosa.feature.mfcc(
+        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mfcc=n_mfcc
+    )
+
+    features_ = []
+    if 'mfcc' in features:
+        features_.append(m)
+
+    if 'dmfcc' in features:
+        dm = librosa.feature.delta(m, order=1)
+        features_.append(dm)
+
+    if 'ddmfcc' in features:
+        ddm = librosa.feature.delta(m, order=2)
+        features_.append(ddm)
+
+    if 'chroma' in features:
+        chrm = librosa.feature.chroma_stft(
+            y=y, sr=sr, n_fft=n_fft, hop_length=hop_length
+        )
+        features_.append(chrm)
+
+    # concatenate features
+    if len(features_) > 1:
+        features_ = np.concatenate(features_, axis=1)
+    else:
+        features_ = features_[0]
+
+    return features_
 
 
 def compute_global_mean_cov(
