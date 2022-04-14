@@ -376,7 +376,7 @@ def m_step(
     n_total_docs: int,
     params: dict[str, torch.Tensor],
     corpus_stick: dict[str, torch.Tensor],
-    cov_reg_weight: float = 1e-8,
+    cov_reg_weight: float = 1e-6,
     eps: float = torch.finfo().eps
 ):
     """
@@ -1114,7 +1114,7 @@ def variational_inference(
                 if batch_update:
                     # DO M-STEP
                     m_step(
-                        batch_size, len(dataset),
+                        len(dataset), len(dataset),
                         params, corpus_stick, eps
                     )
 
