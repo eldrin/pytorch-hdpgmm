@@ -420,12 +420,18 @@ def m_step(
 
         dev = (x_bar_k - params['m0'])
         dev2 = torch.outer(dev, dev)
+        # params['C'][k] = (
+        #     params['W0_inv']
+        #     + N_k * S_k
+        #     + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
+        #     + cov_reg
+        # ) / params['nu'][k]
         params['C'][k] = (
             params['W0_inv']
             + N_k * S_k
             + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
             + cov_reg
-        ) / params['nu'][k]
+        )
 
 
 def update_parameters(
@@ -436,10 +442,13 @@ def update_parameters(
     params: dict[str, torch.Tensor],
     old_params: dict[str, torch.Tensor],
     batch_update: bool = False,
-    corpus_level_params: set[str] = CORPUS_LEVEL_PARAMS
+    corpus_level_params: set[str] = CORPUS_LEVEL_PARAMS,
+    eps: float = 1e-6  # for regularizing precision matrix
 ):
     """
     """
+    K, D = params['m'].shape
+
     if batch_size <= 0 or batch_update:
         rho = 1.
     else:
@@ -451,12 +460,12 @@ def update_parameters(
         old_params[name].copy_(params[name])
 
     # re-compute auxiliary variables
-    W = torch.linalg.inv(params['C'] * params['nu'][:, None, None])
+    W = torch.linalg.inv(params['C'])
+    if eps > 0: W += eps * torch.eye(D, device=W.device)
     params['W_chol'] = torch.linalg.cholesky(W)
     params['W_logdet'] = torch.linalg.slogdet(W).logabsdet
 
     # to compute the full Eq[log|lambda_k|]
-    K, D = params['m'].shape
     arange_d = torch.arange(D, device=params['m'].device)
     log2 = torch.log(torch.as_tensor([2], device=params['m'].device))
     for k in range(K):
@@ -497,7 +506,7 @@ def _init_params(
             isinstance(warm_start_with, HDPGMM_GPU)):
 
         # unpack for further monitoring down below
-        model = warm_start_with
+        model = warm_start_with.hdpgmm
         mean_holdout_probs = model.training_monitors['mean_holdout_perplexity']
         train_lik = model.training_monitors['training_lowerbound']
         start_iter = len(model.training_monitors['training_lowerbound'])
@@ -633,10 +642,12 @@ def _init_params(
                 + N[k] * S_k  # N_k * S_k
                 + beta0 * N[k] / (beta0 + N[k]) * np.outer(dev, dev)
                 + cov_reg
-            ) / nu[k]  # normalization as we compute "covariances" here
+            # ) / nu[k]  # normalization as we compute "covariances" here
+            )
 
     # some pre-computations for computing Eq[eta] and Eq[a(eta)]
-    W = np.linalg.inv(C * nu[:, None, None])
+    # W = np.linalg.inv(C * nu[:, None, None])
+    W = np.linalg.inv(C)
     W_chol = np.linalg.cholesky(W)
     W_logdet = np.linalg.slogdet(W)[1]
 
@@ -652,7 +663,9 @@ def _init_params(
 
     # init main parameters
     params['m'] = torch.as_tensor(m, dtype=torch.float32, device=device)
-    params['C'] = torch.as_tensor(C, dtype=torch.float32, device=device)
+    # params['C'] = torch.as_tensor(C, dtype=torch.float32, device=device)
+    params['C'] = torch.as_tensor(C / nu[:, None, None],
+                                  dtype=torch.float32, device=device)
     params['beta'] = torch.as_tensor(beta, dtype=torch.float32, device=device)
     params['nu'] = torch.as_tensor(nu, dtype=torch.float32, device=device)
     params['u'] = torch.as_tensor(u, dtype=torch.float32, device=device)
@@ -730,10 +743,14 @@ def init_params(
     # set / load / sample the hyper priors
     # TODO: this can be slow if the dataset get larger
     #       torch-gpu implementation could sped up this routine
+    if warm_start_with is not None:
+        warm_starter = warm_start_with.hdpgmm
+    else:
+        warm_starter = None
     m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
                                                 m0, W0, nu0, beta0,
                                                 n_W0_cluster, cluster_frac,
-                                                warm_start_with=warm_start_with)
+                                                warm_start_with=warm_starter)
 
     # get initialization
     params = _init_params(K, T, loader,
@@ -797,7 +814,8 @@ def package_model(
             max_components_corpus,
             max_components_document,
             params['m'].detach().cpu().numpy(),
-            params['C'].detach().cpu().numpy(),
+            # params['C'].detach().cpu().numpy(),
+            (params['C'] / params['nu'][:, None, None]).detach().cpu().numpy(),
             params['nu'].detach().cpu().numpy(),
             params['beta'].detach().cpu().numpy(),
             params['w'].detach().cpu().numpy(),
