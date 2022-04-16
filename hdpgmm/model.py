@@ -926,7 +926,7 @@ def infer_documents(
     # setup data loader
     loader = DataLoader(
         dataset,
-        num_workers=0,
+        num_workers=1,
         collate_fn=partial(collate_var_len_seq, max_len=max_len),
         batch_size=batch_size,
         shuffle=False
@@ -987,7 +987,7 @@ def infer_documents(
             )
 
             # compute the mean log-likelihood
-            Eq_eta *= mask_batch[:, :, None]
+            Eq_eta -= torch.logsumexp(Eq_eta, dim=-1)[..., None]
             ln_lik_[batch_idx] = (
                 masked_logsumexp(Eq_eta, dim=1,
                                  mask=mask_batch[..., None].float())
