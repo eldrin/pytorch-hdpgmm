@@ -19,7 +19,7 @@ from bibim.data import MVVarSeqData
 
 from .data import (HDFMultiVarSeqDataset,
                    collate_var_len_seq)
-from .math import th_batch_logdotexp_2d as blogdotexp
+from .math import th_masked_logsumexp as masked_logsumexp
 
 
 CORPUS_LEVEL_PARAMS =  {'m', 'C', 'beta', 'nu', 'u', 'v', 'y', 'w2'}
@@ -224,14 +224,22 @@ def e_step(
     n_max_iter: int = 100,
     noise_ratio: float = 1e-4,
     chunk_size: int = 128,
+    return_responsibility: bool = False,
     eps: float = torch.finfo().eps
-) -> tuple[float,                     # mini-batch likelihood
-           dict[str, torch.Tensor]]:  # document stick latent vars inference
+) -> tuple[float,                    # mini-batch likelihood
+           dict[str, torch.Tensor],  # document stick latent vars inference
+           Optional[torch.Tensor]]:  # responsibilities (optional)
     """
     """
     M = data_batch.shape[0]
     T = params['a'].shape[1] + 1
     K = params['u'].shape[0] + 1
+    if return_responsibility:
+        resp_batch = torch.empty((M, K),
+                                 dtype=params['m'].dtype,
+                                 device=params['m'].device)
+    else:
+        resp_batch = None
 
     cur_alpha0 = params['w2'][0] / params['w2'][1]
     ii = 0
@@ -352,6 +360,8 @@ def e_step(
         # compute responsibility
         r = torch.bmm(zeta_chunk, torch.clamp(exp_varphi_chunk, min=eps))
         r *= mask_chunk[:, :, None]
+        if return_responsibility:
+            resp_batch[slc] = r.sum(1) / mask_chunk.sum(1).float()[:, None]
 
         # splash noise if needed
         if noise_ratio > 0:
@@ -380,7 +390,7 @@ def e_step(
         dims=(0,)
     )[1:]
 
-    return ln_lik, doc_stick
+    return ln_lik, doc_stick, resp_batch
 
 
 def m_step(
@@ -559,10 +569,6 @@ def _init_params(
         y[0] = model.variational_params[2].alpha
         y[1] = model.variational_params[2].beta
         if isinstance(model.variational_params[3], list):
-            # per-document alpha0
-            for j, w_ in enumerate(model.variational_params[3]):
-                w[j, 0] = w_.alpha
-                w[j, 1] = w_.beta
             w2[0] = g1
             w2[1] = g2
         else:
@@ -788,8 +794,8 @@ def init_params(
     g1: float = 1.,
     g2: float = 1.,
     device: str = 'cpu',
-    n_W0_cluster: int = 128,
-    cluster_frac: float = .01,
+    # n_W0_cluster: int = 128,
+    # cluster_frac: float = .01,
     full_uniform_init: bool = True,
     warm_start_with: Optional[HDPGMM_GPU] = None
 ) -> tuple[dict[str, Union[torch.Tensor,
@@ -935,15 +941,16 @@ def infer_documents(
 
     # unpack model
     params = init_params(
-        K, T, loader, device,
-        warm_start_with=model
+        K, T, loader,
+        warm_start_with=model,
+        device=device
     )[0]
 
     # infer documents
     n_samples = len(loader.dataset)
     ln_lik_ = torch.empty((n_samples, K), device=device)
-    # ln_prior_ = torch.empty_like(ln_lik_)
-    Eq_ln_pi_ = torch.empty_like((n_samples, T), device=device)
+    ln_prior_ = torch.empty_like(ln_lik_)
+    Eq_ln_pi_ = torch.empty((n_samples, T), device=device)
     for mask_batch, data_batch, batch_idx in loader:
 
         # send tensors to the target device
@@ -975,15 +982,26 @@ def infer_documents(
             )
 
             # DO E-STEP AND COMPUTE BATCH LIKELIHOOD
-            ln_lik, doc_stick_batch = e_step(
+            _, doc_stick_batch, resp_batch = e_step(
                 batch_idx, data_batch, mask_batch,
                 Eq_eta, params, temp_vars, corpus_stick,
                 share_alpha0 = share_alpha0,
                 e_step_tol = e_step_tol,
                 n_max_iter = n_max_inner_iter,
                 noise_ratio = 0.,
+                return_responsibility = True,
                 eps = eps
             )
+
+            # compute the mean log-likelihood
+            Eq_eta *= mask_batch[:, :, None]
+            ln_lik_[batch_idx] = (
+                masked_logsumexp(Eq_eta, dim=1,
+                                 mask=mask_batch[..., None].float())
+                - mask_batch.sum(1)[:, None].log()
+            )
+            ln_prior_[batch_idx] = resp_batch
+            Eq_ln_pi_[batch_idx] = doc_stick_batch['Eq_ln_pi']
 
             # free up some big variables to save mem
             del Eq_eta
@@ -991,17 +1009,11 @@ def infer_documents(
             del temp_vars['varphi']
             torch.cuda.empty_cache()
 
-            # compute the mean log-likelihood
-            Eq_eta *= mask_batch[:, :, None]
-            ln_lik_[batch_idx] = (
-                torch.logsumexp(Eq_eta, dim=1)
-                - mask_batch.sum(1)[:, None].log()
-            )
-            Eq_ln_pi_[batch_idx] = doc_stick_batch['Eq_ln_pi']
-
     return {
         'Eq_ln_eta': ln_lik_,
-        'Eq_ln_pi': Eq_ln_pi_
+        'responsibility': ln_prior_,
+        'Eq_ln_pi': Eq_ln_pi_,
+        'w': params['w']
     }
 
 
