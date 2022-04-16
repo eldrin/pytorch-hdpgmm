@@ -794,8 +794,6 @@ def init_params(
     g1: float = 1.,
     g2: float = 1.,
     device: str = 'cpu',
-    # n_W0_cluster: int = 128,
-    # cluster_frac: float = .01,
     full_uniform_init: bool = True,
     warm_start_with: Optional[HDPGMM_GPU] = None
 ) -> tuple[dict[str, Union[torch.Tensor,
@@ -808,23 +806,18 @@ def init_params(
     K = max_components_corpus
     T = max_components_documents
 
-    # # build temporary MVVarSeqData from hdf file pointer
-    # mvvarseqdat = MVVarSeqData(loader.dataset._hf['indptr'][:],
-    #                            loader.dataset._hf['data'],
-    #                            loader.dataset._hf['ids'][:])
-
-    # # set / load / sample the hyper priors
-    # # TODO: this can be slow if the dataset get larger
-    # #       torch-gpu implementation could sped up this routine
-    # if warm_start_with is not None:
-    #     warm_starter = warm_start_with.hdpgmm
-    # else:
-    #     warm_starter = None
-    # m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
-    #                                             m0, W0, nu0, beta0,
-    #                                             n_W0_cluster, cluster_frac,
-    #                                             warm_start_with=warm_starter)
-    m0, W0, nu0, beta0 = _init_hyperpriors(loader, device=device)
+    if warm_start_with:
+        m0, W0, nu0, beta0 = (
+            warm_start_with.hdpgmm.hyper_params[0].mu0,
+            warm_start_with.hdpgmm.hyper_params[0].W,
+            warm_start_with.hdpgmm.hyper_params[0].nu,
+            warm_start_with.hdpgmm.hyper_params[0].lmbda
+        )
+    else:
+        if any([prm is None for prm in [m0, W0, nu0, beta0]]):
+            m0, W0, nu0, beta0 = _init_hyperpriors(
+                loader, device=device
+            )
 
     # get initialization
     params = _init_params(K, T, loader,
