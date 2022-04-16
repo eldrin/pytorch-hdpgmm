@@ -58,9 +58,12 @@ def lnB(
 
 def compute_ln_p_phi_x(
     data_batch: torch.Tensor,
+    mask_batch: torch.BoolTensor,
     m: torch.Tensor,
+    W: torch.Tensor,
     W_chol: torch.Tensor,
     W_logdet: torch.Tensor,
+    W_isposdef: torch.BoolTensor,
     beta: torch.Tensor,
     nu: torch.Tensor
 ) -> torch.Tensor:
@@ -73,15 +76,23 @@ def compute_ln_p_phi_x(
 
     # compute Eq_eta
     for k in range(K):
-        Wx_k = (data_batch - m[k]) @ W_chol[k]
+        if W_isposdef[k]:
+            Wx_k = (data_batch - m[k]) @ W_chol[k]
+            Wx_k = (Wx_k**2).sum(-1)
+        else:
+            dif = (data_batch - m[k])
+            Wx_k = ((dif @ W[k]) * dif).sum(-1)
+        Wx_k *= mask_batch
+
         Eq_eta[:, :, k] = (
             -.5 * (
                 D * _log2pi
                 + D * beta[k]**-1
-                + nu[k] * (Wx_k**2).sum(-1)
+                + nu[k] * Wx_k
                 - W_logdet[k]
             )
         )
+    Eq_eta *= mask_batch[..., None]
     return Eq_eta
 
 
@@ -147,7 +158,7 @@ def compute_document_stick(
 
 def compute_normalwishart_probs(
     m: torch.Tensor,
-    C: torch.Tensor,
+    W: torch.Tensor,
     nu: torch.Tensor,
     beta: torch.Tensor,
     W_chol: torch.Tensor,
@@ -169,7 +180,7 @@ def compute_normalwishart_probs(
     Eq_ln_q = 0.
     for k in range(K):
         # compute W_k and ln|W_k|
-        W_k = torch.linalg.inv(C[k] * nu[k])
+        W_k = W[k]
         logdet_W_k = torch.linalg.slogdet(W_k)[1]
 
         # compute H[q(precision_k)]
@@ -291,20 +302,20 @@ def e_step(
         )
 
         exp_varphi = torch.exp(temp_vars['varphi'])
-        ln_p_z = 0.
-        Eq_ln_pz = 0.
+        # ln_p_z = 0.
+        # Eq_ln_pz = 0.
         Eq_ln_pc = (exp_varphi @ corpus_stick['Eq_ln_beta']).sum()
         Eq_ln_qzqc = (
             (exp_varphi * temp_vars['varphi']).sum()
             + torch.masked_select(temp_vars['zeta'] * temp_vars['zeta'].log(),
                                   mask_batch[..., None]).sum()
         )
-        ln_p_z += torch.masked_select(
+        ln_p_z = torch.masked_select(
             temp_vars['zeta'] * torch.bmm(Eq_eta_batch,
                                           exp_varphi.permute(0, 2, 1)),
             mask_batch[..., None]
         ).sum()
-        Eq_ln_pz += torch.masked_select(
+        Eq_ln_pz = torch.masked_select(
             torch.bmm(temp_vars['zeta'], doc_stick['Eq_ln_pi'][:, :, None]),
             mask_batch[..., None]
         ).sum()
@@ -323,8 +334,8 @@ def e_step(
 
     # update necessary statistics cumulators
     # -- update w tmp cumulator
-    params['ss']['w_'][0] = (T - 1.) * len(batch_idx)
-    params['ss']['w_'][1] = doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1].sum(0)
+    params['ss']['w_'][0] += (T - 1.) * len(batch_idx)
+    params['ss']['w_'][1] += doc_stick['Eq_ln_1_min_pi_hat_cumsum'][:, -1].sum(0)
 
     # -- update N / x_bar / S
     # for memory efficiency, we do the chunking here
@@ -339,7 +350,8 @@ def e_step(
         mask_chunk = mask_batch[slc].float()
 
         # compute responsibility
-        r = zeta_chunk @ torch.clamp(exp_varphi_chunk, min=eps)
+        r = torch.bmm(zeta_chunk, torch.clamp(exp_varphi_chunk, min=eps))
+        r *= mask_chunk[:, :, None]
 
         # splash noise if needed
         if noise_ratio > 0:
@@ -360,7 +372,7 @@ def e_step(
             params['ss']['S'][k] += torch.bmm(rx.permute(0, 2, 1), rx).sum(0)
 
     params['ss']['u_'] += exp_varphi[:, :, :-1].sum((0, 1))
-    params['ss']['v_'] = torch.flip(
+    params['ss']['v_'] += torch.flip(
         torch.cumsum(
             torch.sum(torch.flip(exp_varphi, dims=(2,)), dim=(0, 1)),
             dim=0
@@ -420,18 +432,18 @@ def m_step(
 
         dev = (x_bar_k - params['m0'])
         dev2 = torch.outer(dev, dev)
-        # params['C'][k] = (
-        #     params['W0_inv']
-        #     + N_k * S_k
-        #     + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
-        #     + cov_reg
-        # ) / params['nu'][k]
         params['C'][k] = (
             params['W0_inv']
             + N_k * S_k
             + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
             + cov_reg
-        )
+        ) / params['nu'][k]
+        # params['C'][k] = (
+        #     params['W0_inv']
+        #     + N_k * S_k
+        #     + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
+        #     + cov_reg
+        # )
 
 
 def update_parameters(
@@ -460,10 +472,15 @@ def update_parameters(
         old_params[name].copy_(params[name])
 
     # re-compute auxiliary variables
-    W = torch.linalg.inv(params['C'])
-    if eps > 0: W += eps * torch.eye(D, device=W.device)
-    params['W_chol'] = torch.linalg.cholesky(W)
-    params['W_logdet'] = torch.linalg.slogdet(W).logabsdet
+    W = torch.linalg.inv(params['C'] * params['nu'][:, None, None])
+    # W = torch.linalg.inv(params['C'])
+
+    L, info = torch.linalg.cholesky_ex(W)
+    assert info.sum() == 0
+    params['W'].copy_(W)
+    params['W_isposdef'].copy_(info == 0)
+    params['W_chol'].copy_(L)
+    params['W_logdet'].copy_(torch.linalg.slogdet(W).logabsdet)
 
     # to compute the full Eq[log|lambda_k|]
     arange_d = torch.arange(D, device=params['m'].device)
@@ -524,12 +541,15 @@ def _init_params(
 
         m = np.empty((K, D))
         C = np.empty((K, D, D))
+        W = np.empty_like(C)
         beta = np.empty((K,))
         nu = np.empty((K,))
 
         for k, phi_ in enumerate(model.variational_params[0]):
             m[k] = phi_.mu0
             C[k] = np.linalg.inv(phi_.W) / phi_.nu
+            # C[k] = np.linalg.inv(phi_.W)
+            W[k] = phi_.W
             beta[k] = phi_.lmbda
             nu[k] = phi_.nu
 
@@ -642,13 +662,12 @@ def _init_params(
                 + N[k] * S_k  # N_k * S_k
                 + beta0 * N[k] / (beta0 + N[k]) * np.outer(dev, dev)
                 + cov_reg
-            # ) / nu[k]  # normalization as we compute "covariances" here
-            )
+            ) / nu[k]  # normalization as we compute "covariances" here
+            # )
 
     # some pre-computations for computing Eq[eta] and Eq[a(eta)]
-    # W = np.linalg.inv(C * nu[:, None, None])
-    W = np.linalg.inv(C)
-    W_chol = np.linalg.cholesky(W)
+    W = np.linalg.inv(C * nu[:, None, None])
+    # W = np.linalg.inv(C)
     W_logdet = np.linalg.slogdet(W)[1]
 
     # to compute the full Eq[log|lambda_k|]
@@ -663,9 +682,10 @@ def _init_params(
 
     # init main parameters
     params['m'] = torch.as_tensor(m, dtype=torch.float32, device=device)
-    # params['C'] = torch.as_tensor(C, dtype=torch.float32, device=device)
-    params['C'] = torch.as_tensor(C / nu[:, None, None],
-                                  dtype=torch.float32, device=device)
+    params['C'] = torch.as_tensor(C, dtype=torch.float32, device=device)
+    # params['C'] = torch.as_tensor(C / nu[:, None, None],
+    #                               dtype=torch.float32, device=device)
+    params['W'] = torch.as_tensor(W, dtype=torch.float32, device=device)
     params['beta'] = torch.as_tensor(beta, dtype=torch.float32, device=device)
     params['nu'] = torch.as_tensor(nu, dtype=torch.float32, device=device)
     params['u'] = torch.as_tensor(u, dtype=torch.float32, device=device)
@@ -675,7 +695,9 @@ def _init_params(
     params['b'] = torch.as_tensor(b, dtype=torch.float32, device=device)
     params['w'] = torch.as_tensor(w, dtype=torch.float32, device=device)
     params['w2'] = torch.as_tensor(w2, dtype=torch.float32, device=device)
-    params['W_chol'] = torch.as_tensor(W_chol, dtype=torch.float32, device=device)
+    L, info = torch.linalg.cholesky_ex(params['W'])
+    params['W_chol'] = torch.as_tensor(L, dtype=torch.float32, device=device)
+    params['W_isposdef'] = info == 0
     params['W_logdet'] = torch.as_tensor(W_logdet, dtype=torch.float32, device=device)
 
     # copying (wrapping to torch Tensors) hyper-priors
@@ -708,6 +730,51 @@ def _init_params(
     return params
 
 
+def _init_hyperpriors(
+    loader: DataLoader,
+    beta0: float = 2.,
+    nu0_offset: float = 2.,
+    device: str = 'cpu',
+    verbose: bool = False
+) -> tuple[npt.ArrayLike,
+           npt.ArrayLike,
+           npt.ArrayLike,
+           npt.ArrayLike]:
+    """
+    """
+    x_bar = None
+    S = None
+    N = 0
+    with tqdm(total=len(loader), ncols=80, disable=not verbose) as prog:
+        for mask_batch, data_batch, batch_idx in loader:
+
+            # send tensors to the target device
+            mask_batch = mask_batch.to(device)
+            data_batch = data_batch.to(device)
+            batch_idx = batch_idx.to(device)
+
+            if x_bar is None:
+                D = data_batch.shape[-1]
+                x_bar = torch.zeros((D,), dtype=data_batch.dtype, device=device)
+                S = torch.zeros((D, D), dtype=data_batch.dtype, device=device)
+
+            # compute accumulators
+            data_flat = data_batch.view(-1, data_batch.shape[-1])
+            x_bar += data_flat.sum(0)
+            S += data_flat.T @ data_flat
+            N += data_flat.shape[0]
+
+            prog.update()
+
+    m0 = x_bar / N
+    W0 = torch.linalg.inv((S / N) - torch.outer(m0, m0))
+
+    m0 = m0.detach().cpu().numpy()
+    W0 = W0.detach().cpu().numpy()
+    nu0 = D + nu0_offset
+    return m0, W0, nu0, beta0
+
+
 def init_params(
     max_components_corpus: int,
     max_components_documents: int,
@@ -735,22 +802,23 @@ def init_params(
     K = max_components_corpus
     T = max_components_documents
 
-    # build temporary MVVarSeqData from hdf file pointer
-    mvvarseqdat = MVVarSeqData(loader.dataset._hf['indptr'][:],
-                               loader.dataset._hf['data'],
-                               loader.dataset._hf['ids'][:])
+    # # build temporary MVVarSeqData from hdf file pointer
+    # mvvarseqdat = MVVarSeqData(loader.dataset._hf['indptr'][:],
+    #                            loader.dataset._hf['data'],
+    #                            loader.dataset._hf['ids'][:])
 
-    # set / load / sample the hyper priors
-    # TODO: this can be slow if the dataset get larger
-    #       torch-gpu implementation could sped up this routine
-    if warm_start_with is not None:
-        warm_starter = warm_start_with.hdpgmm
-    else:
-        warm_starter = None
-    m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
-                                                m0, W0, nu0, beta0,
-                                                n_W0_cluster, cluster_frac,
-                                                warm_start_with=warm_starter)
+    # # set / load / sample the hyper priors
+    # # TODO: this can be slow if the dataset get larger
+    # #       torch-gpu implementation could sped up this routine
+    # if warm_start_with is not None:
+    #     warm_starter = warm_start_with.hdpgmm
+    # else:
+    #     warm_starter = None
+    # m0, W0, beta0, nu0 = hdpgmm.init_hyperprior(mvvarseqdat,
+    #                                             m0, W0, nu0, beta0,
+    #                                             n_W0_cluster, cluster_frac,
+    #                                             warm_start_with=warm_starter)
+    m0, W0, nu0, beta0 = _init_hyperpriors(loader, device=device)
 
     # get initialization
     params = _init_params(K, T, loader,
@@ -814,8 +882,8 @@ def package_model(
             max_components_corpus,
             max_components_document,
             params['m'].detach().cpu().numpy(),
-            # params['C'].detach().cpu().numpy(),
-            (params['C'] / params['nu'][:, None, None]).detach().cpu().numpy(),
+            params['C'].detach().cpu().numpy(),
+            # (params['C'] / params['nu'][:, None, None]).detach().cpu().numpy(),
             params['nu'].detach().cpu().numpy(),
             params['beta'].detach().cpu().numpy(),
             params['w'].detach().cpu().numpy(),
@@ -896,9 +964,12 @@ def infer_documents(
             # COMPUTE Eq[eta]
             Eq_eta = compute_ln_p_phi_x(
                 data_batch,
+                mask_batch,
                 params['m'],
+                params['W'],
                 params['W_chol'],
                 params['W_logdet'],
+                params['W_isposdef'],
                 params['beta'],
                 params['nu']
             )
@@ -1055,9 +1126,12 @@ def variational_inference(
                         # COMPUTE Eq[eta]
                         Eq_eta = compute_ln_p_phi_x(
                             data_batch,
+                            mask_batch,
                             params['m'],
+                            params['W'],
                             params['W_chol'],
                             params['W_logdet'],
+                            params['W_isposdef'],
                             params['beta'],
                             params['nu']
                         )
@@ -1077,7 +1151,7 @@ def variational_inference(
                         # COMPUTE LOWERBOUNDS
                         ln_lik *= len(dataset) / data_batch.shape[0]  # est. for the total lik
                         nw_prob = compute_normalwishart_probs(
-                            params['m'], params['C'],
+                            params['m'], params['W'],
                             params['nu'], params['beta'],
                             params['W_chol'], params['W_logdet'],
                             params['m0'], params['W0_inv'],
@@ -1130,30 +1204,31 @@ def variational_inference(
                     it += 1
 
                 if batch_update:
-                    # DO M-STEP
-                    m_step(
-                        len(dataset), len(dataset),
-                        params, corpus_stick, eps
-                    )
-
-                    # UPDATE NEW PARAMETERS
-                    update_parameters(
-                        cur_iter=it,
-                        tau0=tau0,
-                        kappa=kappa,
-                        batch_size=batch_size,
-                        params=params,
-                        old_params=old_params,
-                        batch_update=batch_update
-                    )
-
-                    if save_every == 'epoch':
-                        save_state(
-                           max_components_corpus,
-                           max_components_document,
-                           params, share_alpha0,
-                           out_path, prefix, it
+                    with torch.no_grad():
+                        # DO M-STEP
+                        m_step(
+                            len(dataset), len(dataset),
+                            params, corpus_stick, eps
                         )
+
+                        # UPDATE NEW PARAMETERS
+                        update_parameters(
+                            cur_iter=it,
+                            tau0=tau0,
+                            kappa=kappa,
+                            batch_size=batch_size,
+                            params=params,
+                            old_params=old_params,
+                            batch_update=batch_update
+                        )
+
+                if save_every == 'epoch':
+                    save_state(
+                       max_components_corpus,
+                       max_components_document,
+                       params, share_alpha0,
+                       out_path, prefix, it
+                    )
 
                 prog.update()
 

@@ -11,47 +11,10 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 import torchaudio
+import torchaudio.functional as F
 
 
-class FeatureWhiteningMixin:
-    """
-    """
-    def _init_whitening(self):
-        """
-        """
-        # compute whitening parameters
-        self._whitening_params = compute_global_mean_cov(self._hf,
-                                                         self.chunk_size,
-                                                         self.verbose)
-
-class WhiteningDataset(Dataset, FeatureWhiteningMixin):
-    """
-    """
-    def __init__(
-        self,
-        whiten: bool = False,
-        chunk_size: int = 1024,
-        verbose: bool = False
-    ):
-        """
-        """
-        self.whiten = whiten
-        self.chunk_size = chunk_size
-        self.verbose = verbose
-
-        if whiten:
-            self._init_whitening()
-
-    def apply_whitening(self, x):
-        """
-        """
-        if self.whiten:
-            x -= self._whitening_params['mean'][None]
-            x = x @ self._whitening_params['precision_cholesky']
-        return x
-
-
-class HDFMultiVarSeqDataset(WhiteningDataset):
+class HDFMultiVarSeqDataset(Dataset):
     def __init__(
         self,
         h5_fn: Union[str, Path],
@@ -61,10 +24,14 @@ class HDFMultiVarSeqDataset(WhiteningDataset):
     ):
         """
         """
-        super().__init__(whiten, chunk_size, verbose)
-
         self.h5_fn = h5_fn
         self._hf = h5py.File(h5_fn, 'r')
+        self.whiten = whiten
+        self.chunk_size = chunk_size
+        self.verbose = verbose
+
+        if whiten:
+            self._init_whitening()
 
     def __del__(self):
         self._hf.close()
@@ -90,6 +57,22 @@ class HDFMultiVarSeqDataset(WhiteningDataset):
 
         return (idx, x)
 
+    def apply_whitening(self, x):
+        """
+        """
+        if self.whiten:
+            x -= self._whitening_params['mean'][None]
+            x = x @ self._whitening_params['precision_cholesky']
+        return x
+
+    def _init_whitening(self):
+        """
+        """
+        # compute whitening parameters
+        self._whitening_params = compute_global_mean_cov(self._hf,
+                                                         self.chunk_size,
+                                                         self.verbose)
+
 
 class AudioDataset(Dataset):
     """
@@ -114,7 +97,7 @@ class AudioDataset(Dataset):
         self.transform = transform
 
     def __len__(self) -> int:
-        return len(self.audio_list_fn)
+        return len(self._audio_fns)
 
     def __getitem__(
         self,
@@ -122,9 +105,18 @@ class AudioDataset(Dataset):
     ) -> tuple[int, torch.Tensor]:
         """
         """
-        y, sr = torchaudio.load(self.audio_list_fn[idx])
+        y, sr = torchaudio.load(self._audio_fns[idx])
+        if y.shape[0] > 1:
+            y = y.mean(0)
+        if sr != 22050:
+            y = F.resample(y, sr, 22050)
+
         if self.transform:
             x = self.transform(y.numpy(), sr)
+            if len(x.shape) > 2:
+                # sometimes it comes with weird trailing dimension
+                # so we index it forcefully
+                x = x[..., 0]  # this maybe a bug...
 
         # wrap to torch.Tensor
         x = torch.as_tensor(x, dtype=torch.float32)
@@ -166,6 +158,23 @@ def collate_var_len_seq(
             data_batch_mat[j, :n] = x
 
     return mask, data_batch_mat, batch_idx
+
+
+def ext_mel(
+    y: npt.ArrayLike,
+    sr: int,
+    n_fft: int = 2048,
+    hop_length: int = 512,
+    db_scale: bool = True
+) -> npt.ArrayLike:
+    """
+    """
+    m = librosa.feature.melspectrogram(
+        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
+    )
+    if db_scale:
+        m = librosa.power_to_db(m)
+    return m.T
 
 
 def ext_feature(
@@ -212,7 +221,7 @@ def ext_feature(
     else:
         features_ = features_[0]
 
-    return features_
+    return features_.T  # (n_frames/n_tokens, dim)
 
 
 def compute_global_mean_cov(
