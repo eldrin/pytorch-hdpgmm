@@ -31,6 +31,7 @@ _LOG_2PI = _LOG_2 + _LOG_PI
 @dataclass
 class HDPGMM_GPU:
     hdpgmm: HDPGMM
+    learning_hyperparams: dict[str, object]
     whiten_params: Optional[dict[str, npt.ArrayLike]] = None
 
 
@@ -872,9 +873,11 @@ def package_model(
     max_components_corpus: int,
     max_components_document: int,
     params: dict[str, torch.Tensor],
-    share_alpha0: bool = False
+    learning_hyperparams: dict[str, object],
 ) -> dict[str, HDPGMM_GPU]:
     """
+    # TODO: make this object more generalized
+    #       (not to depend on `bibim` and this package)
     """
     pkg = HDPGMM_GPU(
         hdpgmm = hdpgmm.package_model(
@@ -897,8 +900,9 @@ def package_model(
             params['s1'], params['s2'], params['g1'], params['g2'],
             params['mean_holdout_perplexity'],
             params['training_lowerbound'],
-            share_alpha0
+            learning_hyperparams['share_alpha0']
         ),
+        learning_hyperparams = learning_hyperparams,
         whiten_params = params.get('whiten_params')
     )
     return pkg
@@ -1014,7 +1018,7 @@ def save_state(
     max_components_corpus: int,
     max_components_document: int,
     params: dict[str, torch.Tensor],
-    share_alpha0: bool,
+    learning_hyperparams: dict[str, object],
     out_path: str,
     prefix: str,
     it: int  # number of iteration so far
@@ -1024,7 +1028,7 @@ def save_state(
     ret = package_model(
         max_components_corpus,
         max_components_document,
-        params, share_alpha0
+        params, learning_hyperparams
     )
     path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
     with path.open('wb') as fp:
@@ -1054,8 +1058,6 @@ def variational_inference(
     full_uniform_init: bool = True,
     share_alpha0: bool = True,
     data_parallel_num_workers: int = 0,
-    n_W0_cluster: int = 128,
-    cluster_frac: float = .01,
     warm_start_with: Optional[HDPGMM_GPU] = None,
     max_len: Optional[int] = None,
     save_every: Optional[int] = None,
@@ -1086,10 +1088,25 @@ def variational_inference(
     #######################
     params, old_params = init_params(
         max_components_corpus, max_components_document, loader,
-        m0, W0, nu0, beta0, s1, s2, g1, g2,
-        device, n_W0_cluster, cluster_frac,
+        m0, W0, nu0, beta0, s1, s2, g1, g2, device,
         full_uniform_init=full_uniform_init,
         warm_start_with=warm_start_with
+    )
+    learning_hyperparams = dict(
+        batch_size = batch_size,
+        kappa = kappa,
+        tau0 = tau0,
+        batch_update = batch_update,
+        n_max_inner_iter = n_max_inner_iter,
+        e_step_tol = e_step_tol,
+        base_noise_ratio = base_noise_ratio,
+        full_uniform_init = full_uniform_init,
+        share_alpha0 = share_alpha0,
+        data_parallel_num_workers = data_parallel_num_workers,
+        warm_start_with = warm_start_with,
+        max_len = max_len,
+        save_every = save_every,
+        device = device
     )
 
     #######################
@@ -1202,7 +1219,7 @@ def variational_inference(
                             save_state(
                                max_components_corpus,
                                max_components_document,
-                               params, share_alpha0,
+                               params, learning_hyperparams,
                                out_path, prefix, it
                             )
 
@@ -1231,7 +1248,7 @@ def variational_inference(
                     save_state(
                        max_components_corpus,
                        max_components_document,
-                       params, share_alpha0,
+                       params, learning_hyperparams,
                        out_path, prefix, it
                     )
 
@@ -1246,6 +1263,6 @@ def variational_inference(
     ret = package_model(
         max_components_corpus,
         max_components_document,
-        params, share_alpha0
+        params, learning_hyperparams
     )
     return ret
