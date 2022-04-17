@@ -360,20 +360,27 @@ def e_step(
 
         # compute responsibility
         r = torch.bmm(zeta_chunk, torch.clamp(exp_varphi_chunk, min=eps))
+
+        # is this normalization necessary?
+        r /= torch.clamp(r.sum(-1)[..., None], min=eps)
+
+        # final masking
         r *= mask_chunk[:, :, None]
+
         if return_responsibility:
             resp_batch[slc] = r.sum(1) / mask_chunk.sum(1).float()[:, None]
 
         # splash noise if needed
         if noise_ratio > 0:
-            norm = r.sum(-1)
-            r /= torch.clamp(norm[:, :, None], min=eps)
+            # norm = r.sum(-1)
+            # r /= torch.clamp(norm[:, :, None], min=eps)
             e = torch.rand(*r.shape, device=data_batch.device)
             e /= e.sum(-1)[:, :, None]
             e *= mask_chunk[:, :, None]
             r *= (1. - noise_ratio)
             r += e * noise_ratio
-            r *= norm[:, :, None] * mask_chunk[:, :, None]
+            # r *= norm[:, :, None] * mask_chunk[:, :, None]
+            r *= mask_chunk[:, :, None]
 
         params['ss']['N'] += r.sum((0, 1))
         for k in range(K):
@@ -943,6 +950,9 @@ def infer_documents(
         device=device
     )[0]
 
+    # compute Eq_beta and probability
+    corpus_stick = compute_corpus_stick(K, params)
+
     # infer documents
     n_samples = len(loader.dataset)
     ln_lik_ = torch.empty((n_samples, K), device=device)
@@ -961,9 +971,6 @@ def infer_documents(
             # and re-init including accumulators for sufficient statistics
             temp_vars = init_temp_vars(K, T, data_batch, mask_batch)
             reinit_ss(params)
-
-            # compute Eq_beta and probability
-            corpus_stick = compute_corpus_stick(K, params)
 
             # COMPUTE Eq[eta]
             Eq_eta = compute_ln_p_phi_x(
@@ -1129,6 +1136,8 @@ def variational_inference(
     #######################
     it = params['start_iter']
     try:
+        # compute Eq_beta and probability
+        corpus_stick = compute_corpus_stick(max_components_corpus, params)
         with tqdm(total=n_epochs, ncols=80, disable=not verbose) as prog:
             for _ in range(n_epochs):
                 if batch_update:
@@ -1153,12 +1162,6 @@ def variational_inference(
                         )
                         if not batch_update:
                             reinit_ss(params)
-
-                        # compute Eq_beta and probability
-                        corpus_stick = compute_corpus_stick(
-                            max_components_corpus,
-                            params
-                        )
 
                         # COMPUTE Eq[eta]
                         Eq_eta = compute_ln_p_phi_x(
@@ -1220,6 +1223,12 @@ def variational_inference(
                                 batch_update=batch_update
                             )
 
+                            # compute Eq_beta and probability
+                            corpus_stick = compute_corpus_stick(
+                                max_components_corpus,
+                                params
+                            )
+
                         # free up some big variables to save mem
                         del Eq_eta
                         del temp_vars['zeta']
@@ -1257,6 +1266,12 @@ def variational_inference(
                             params=params,
                             old_params=old_params,
                             batch_update=batch_update
+                        )
+
+                        # compute Eq_beta and probability
+                        corpus_stick = compute_corpus_stick(
+                            max_components_corpus,
+                            params
                         )
 
                 if save_every == 'epoch':
