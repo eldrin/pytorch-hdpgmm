@@ -1035,6 +1035,21 @@ def save_state(
         pkl.dump(ret, fp)
 
 
+def load_model(
+    fn: Union[str, Path],
+) -> HDPGMM_GPU:
+    """
+    """
+    if isinstance(fn, str):
+        fn = Path(fn)
+    assert fn.exists()
+
+    with fn.open('rb') as fp:
+        model = pkl.load(fp)
+
+    return model
+
+
 def variational_inference(
     dataset: Dataset,
     max_components_corpus: int,
