@@ -940,7 +940,7 @@ def infer_documents(
         num_workers=1,
         collate_fn=partial(collate_var_len_seq, max_len=max_len),
         batch_size=batch_size,
-        shuffle=False
+        shuffle=True
     )
 
     # unpack model
