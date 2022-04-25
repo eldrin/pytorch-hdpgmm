@@ -1008,10 +1008,12 @@ def infer_documents(
             Eq_ln_pi_[batch_idx] = doc_stick_batch['Eq_ln_pi']
 
             # free up some big variables to save mem
-            # del Eq_eta
-            # del temp_vars['zeta']
-            # del temp_vars['varphi']
-            # torch.cuda.empty_cache()
+            del Eq_eta
+            del temp_vars['zeta']
+            del temp_vars['varphi']
+            if device != 'cpu':
+                with torch.cuda.device(device):
+                    torch.cuda.empty_cache()
 
     return {
         'Eq_ln_eta': ln_lik_,
@@ -1230,10 +1232,12 @@ def variational_inference(
                             )
 
                         # free up some big variables to save mem
-                        # del Eq_eta
-                        # del temp_vars['zeta']
-                        # del temp_vars['varphi']
-                        # torch.cuda.empty_cache()
+                        del Eq_eta
+                        del temp_vars['zeta']
+                        del temp_vars['varphi']
+                        if device != 'cpu':
+                            with torch.cuda.device(device):
+                                torch.cuda.empty_cache()
 
                         if (
                             (save_every is not None) and
