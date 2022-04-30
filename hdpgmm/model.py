@@ -442,6 +442,7 @@ def m_step(
         x_bar_k = params['ss']['x_bar'][k] * batch_w / N_k
         xx_bar_k = torch.outer(x_bar_k, x_bar_k)
         S_k = params['ss']['S'][k] * batch_w / N_k - xx_bar_k
+        S_k += cov_reg
 
         params['m'][k] = (
             params['beta'][k]**-1
@@ -454,13 +455,11 @@ def m_step(
             params['W0_inv']
             + N_k * S_k
             + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
-            + cov_reg
         ) / params['nu'][k]
         # params['C'][k] = (
         #     params['W0_inv']
         #     + N_k * S_k
         #     + params['beta0'] * N_k / (params['beta0'] + N_k) * dev2
-        #     + cov_reg
         # )
 
 
@@ -662,6 +661,7 @@ def _init_params(
             # the model currently only works with float64
             x_bar_k = x_bar[k].astype(np.float64)
             S_k = S[k].astype(np.float64) - np.outer(x_bar_k, x_bar_k)
+            S_k += cov_reg
 
             # x_bar_ is not yet normalized (Nx_bar)
             m[k] = beta[k]**-1 * (beta0 * m0 + N[k] * x_bar_k)  # N_k * x_bar_k
@@ -675,7 +675,6 @@ def _init_params(
                 W0_inv
                 + N[k] * S_k  # N_k * S_k
                 + beta0 * N[k] / (beta0 + N[k]) * np.outer(dev, dev)
-                + cov_reg
             ) / nu[k]  # normalization as we compute "covariances" here
             # )
 
