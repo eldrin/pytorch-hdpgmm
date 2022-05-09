@@ -15,7 +15,6 @@ from tqdm import tqdm
 
 from bibim.hdp import gaussian as hdpgmm
 from bibim.hdp.gaussian import HDPGMM
-from bibim.data import MVVarSeqData
 
 from .data import (HDFMultiVarSeqDataset,
                    collate_var_len_seq)
