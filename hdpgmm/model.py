@@ -531,7 +531,8 @@ def _init_params(
     J = len(loader.dataset)
     K = max_components_corpus
     T = max_components_documents
-    N_, D = loader.dataset._hf['data'].shape
+    N_ = loader.dataset._raw_nrow
+    D = loader.dataset.dim
     W0_inv = np.linalg.inv(W0)
 
 

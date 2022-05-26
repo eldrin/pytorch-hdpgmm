@@ -25,7 +25,6 @@ class HDFMultiVarSeqDataset(Dataset):
         """
         """
         self.h5_fn = h5_fn
-        self._hf = h5py.File(h5_fn, 'r')
         self.whiten = whiten
         self.chunk_size = chunk_size
         self.verbose = verbose
@@ -33,11 +32,13 @@ class HDFMultiVarSeqDataset(Dataset):
         if whiten:
             self._init_whitening()
 
-    def __del__(self):
-        self._hf.close()
+        # cache the size of the dataset
+        with h5py.File(h5_fn, 'r') as hf:
+            self._length = hf['indptr'].shape[0] - 1
+            self._raw_nrow, self.dim = hf['data'].shape
 
     def __len__(self) -> int:
-        return self._hf['indptr'].shape[0] - 1
+        return self._length
 
     def __getitem__(
         self,
@@ -45,9 +46,10 @@ class HDFMultiVarSeqDataset(Dataset):
     ) -> tuple[int, torch.Tensor]:
         """
         """
-        # index frames/tokens
-        j0, j1 = self._hf['indptr'][idx], self._hf['indptr'][idx+1]
-        x = self._hf['data'][j0:j1]
+        with h5py.File(self.h5_fn, 'r') as hf:
+            # index frames/tokens
+            j0, j1 = hf['indptr'][idx], hf['indptr'][idx+1]
+            x = hf['data'][j0:j1]
 
         # whiten, if needed
         x = self.apply_whitening(x)
@@ -69,9 +71,10 @@ class HDFMultiVarSeqDataset(Dataset):
         """
         """
         # compute whitening parameters
-        self._whitening_params = compute_global_mean_cov(self._hf,
-                                                         self.chunk_size,
-                                                         self.verbose)
+        with h5py.File(self.h5_fn, 'r') as hf:
+            self._whitening_params = compute_global_mean_cov(hf,
+                                                             self.chunk_size,
+                                                             self.verbose)
 
 
 class AudioDataset(Dataset):
