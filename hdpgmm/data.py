@@ -36,6 +36,7 @@ class HDFMultiVarSeqDataset(Dataset):
         with h5py.File(h5_fn, 'r') as hf:
             self._length = hf['indptr'].shape[0] - 1
             self._raw_nrow, self.dim = hf['data'].shape
+            self.ids = hf['ids'][:]
 
     def __len__(self) -> int:
         return self._length
