@@ -1126,7 +1126,7 @@ def variational_inference(
         full_uniform_init = full_uniform_init,
         share_alpha0 = share_alpha0,
         data_parallel_num_workers = data_parallel_num_workers,
-        warm_start_with = warm_start_with,
+        # warm_start_with = warm_start_with,   # we don't want to ship this anymore
         max_len = max_len,
         save_every = save_every,
         device = device
