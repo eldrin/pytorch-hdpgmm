@@ -13,12 +13,12 @@ from torch.utils.data import DataLoader, Dataset
 
 from tqdm import tqdm
 
-from bibim.hdp import gaussian as hdpgmm
-from bibim.hdp.gaussian import HDPGMM
-
 from .data import (HDFMultiVarSeqDataset,
                    collate_var_len_seq)
 from .math import th_masked_logsumexp as masked_logsumexp
+from .parameters import (DPParameters,
+                         NormalWishartParameters,
+                         GammaParameters)
 
 
 CORPUS_LEVEL_PARAMS =  {'m', 'C', 'beta', 'nu', 'u', 'v', 'y', 'w2'}
@@ -28,8 +28,18 @@ _LOG_2PI = _LOG_2 + _LOG_PI
 
 
 @dataclass
-class HDPGMM_GPU:
-    hdpgmm: HDPGMM
+class HDPGMM:
+    max_components_corpus: int
+    max_components_document: int
+    variational_params: tuple[list[NormalWishartParameters],
+                              DPParameters,        # corpus level
+                              GammaParameters,     # corpus level
+                              Union[GammaParameters,
+                                    list[GammaParameters]]] # document level
+    hyper_params: tuple[NormalWishartParameters,
+                        GammaParameters,
+                        GammaParameters]
+    training_monitors: dict[str, list[float]]  # some monitoring stuffs
     learning_hyperparams: dict[str, object]
     whiten_params: Optional[dict[str, npt.ArrayLike]] = None
 
@@ -522,7 +532,7 @@ def _init_params(
     g2: float = 1.,
     device: str = 'cpu',
     full_uniform_init: bool = True,
-    warm_start_with: Optional[HDPGMM_GPU] = None
+    warm_start_with: Optional[HDPGMM] = None
 ) -> dict[str, Union[torch.Tensor,
                      float,
                      list[float]]]:
@@ -537,10 +547,10 @@ def _init_params(
 
 
     if (warm_start_with is not None and
-            isinstance(warm_start_with, HDPGMM_GPU)):
+            isinstance(warm_start_with, HDPGMM)):
 
         # unpack for further monitoring down below
-        model = warm_start_with.hdpgmm
+        model = warm_start_with
         mean_holdout_probs = model.training_monitors['mean_holdout_perplexity']
         train_lik = model.training_monitors['training_lowerbound']
         start_iter = len(model.training_monitors['training_lowerbound'])
@@ -802,7 +812,7 @@ def init_params(
     g2: float = 1.,
     device: str = 'cpu',
     full_uniform_init: bool = True,
-    warm_start_with: Optional[HDPGMM_GPU] = None
+    warm_start_with: Optional[HDPGMM] = None
 ) -> tuple[dict[str, Union[torch.Tensor,
                            float,
                            list[float]]],
@@ -815,10 +825,10 @@ def init_params(
 
     if warm_start_with:
         m0, W0, nu0, beta0 = (
-            warm_start_with.hdpgmm.hyper_params[0].mu0,
-            warm_start_with.hdpgmm.hyper_params[0].W,
-            warm_start_with.hdpgmm.hyper_params[0].nu,
-            warm_start_with.hdpgmm.hyper_params[0].lmbda
+            warm_start_with.hyper_params[0].mu0,
+            warm_start_with.hyper_params[0].W,
+            warm_start_with.hyper_params[0].nu,
+            warm_start_with.hyper_params[0].lmbda
         )
     else:
         if any([prm is None for prm in [m0, W0, nu0, beta0]]):
@@ -880,34 +890,62 @@ def package_model(
     max_components_document: int,
     params: dict[str, torch.Tensor],
     learning_hyperparams: dict[str, object],
-) -> dict[str, HDPGMM_GPU]:
+) -> dict[str, HDPGMM]:
     """
     # TODO: make this object more generalized
     #       (not to depend on `bibim` and this package)
     """
-    pkg = HDPGMM_GPU(
-        hdpgmm = hdpgmm.package_model(
-            max_components_corpus,
-            max_components_document,
-            params['m'].detach().cpu().numpy(),
-            params['C'].detach().cpu().numpy(),
-            # (params['C'] / params['nu'][:, None, None]).detach().cpu().numpy(),
-            params['nu'].detach().cpu().numpy(),
-            params['beta'].detach().cpu().numpy(),
-            params['w'].detach().cpu().numpy(),
-            params['w2'].detach().cpu().numpy(),
-            params['u'].detach().cpu().numpy(),
-            params['v'].detach().cpu().numpy(),
-            params['y'].detach().cpu().numpy(),
-            params['m0'].detach().cpu().numpy(),
-            params['W0'].detach().cpu().numpy(),
-            params['beta0'],
-            params['nu0'],
-            params['s1'], params['s2'], params['g1'], params['g2'],
-            params['mean_holdout_perplexity'],
-            params['training_lowerbound'],
-            learning_hyperparams['share_alpha0']
+    # pack tensors to list of parameters
+    y = params['y'].detach().cpu().numpy()
+    w2 = params['w2'].detach().cpu().numpy()
+
+    normal_wisharts = [
+        NormalWishartParameters(m_, beta_,
+                                np.linalg.inv(C_ * nu_), nu_)
+        for m_, C_, beta_, nu_
+        in zip(*[
+            params[k].detach().cpu().numpy()
+            for k in ['m', 'C', 'beta', 'nu']
+        ])
+    ]
+
+    dps_corpus = DPParameters(len(params['u']),
+                              params['u'].detach().cpu().numpy(),
+                              params['v'].detach().cpu().numpy())
+
+    alpha_gamma_corpus = GammaParameters(y[0], y[1])
+
+    if learning_hyperparams['share_alpha0']:
+        alpha_gamma_doc = GammaParameters(w2[0], w2[1])
+    else:
+        alpha_gamma_doc = [
+            GammaParameters(w_[0], w_[1])
+            for w_ in params['w'].detach().cpu().numpy()
+        ]
+
+    pkg = HDPGMM(
+        max_components_corpus,
+        max_components_document,
+        variational_params = (
+            normal_wisharts,
+            dps_corpus,
+            alpha_gamma_corpus,
+            alpha_gamma_doc
         ),
+        hyper_params = (
+            NormalWishartParameters(
+                params['m0'].detach().cpu().numpy(),
+                params['beta0'],
+                params['W0'].detach().cpu().numpy(),
+                params['nu0']
+            ),
+            GammaParameters(params['s1'], params['s2']),
+            GammaParameters(params['g1'], params['g2'])
+        ),
+        training_monitors = {
+            'mean_holdout_perplexity': params['mean_holdout_perplexity'],
+            'training_lowerbound': params['training_lowerbound']
+        },
         learning_hyperparams = learning_hyperparams,
         whiten_params = params.get('whiten_params')
     )
@@ -916,7 +954,7 @@ def package_model(
 
 def infer_documents(
     dataset: HDFMultiVarSeqDataset,
-    model: HDPGMM_GPU,
+    model: HDPGMM,
     n_max_inner_iter: int = 100,
     e_step_tol: float = 1e-4,
     batch_size: int = 512,
@@ -926,9 +964,9 @@ def infer_documents(
 ) -> dict[str, torch.Tensor]:
     """
     """
-    K = model.hdpgmm.max_components_corpus
-    T = model.hdpgmm.max_components_document
-    if isinstance(model.hdpgmm.variational_params[3], list):
+    K = model.max_components_corpus
+    T = model.max_components_document
+    if isinstance(model.variational_params[3], list):
         share_alpha0 = False
     else:
         share_alpha0 = True
@@ -1045,7 +1083,7 @@ def save_state(
 
 def load_model(
     fn: Union[str, Path],
-) -> HDPGMM_GPU:
+) -> HDPGMM:
     """
     """
     if isinstance(fn, str):
@@ -1081,7 +1119,7 @@ def variational_inference(
     full_uniform_init: bool = True,
     share_alpha0: bool = True,
     data_parallel_num_workers: int = 0,
-    warm_start_with: Optional[HDPGMM_GPU] = None,
+    warm_start_with: Optional[HDPGMM] = None,
     max_len: Optional[int] = None,
     save_every: Optional[int] = None,
     out_path: str = './',
