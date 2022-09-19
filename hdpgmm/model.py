@@ -29,6 +29,19 @@ _LOG_2PI = _LOG_2 + _LOG_PI
 
 @dataclass
 class HDPGMM:
+    """dataclass contains the model parameters
+
+    it contains all the (variational) parameters and hyper-parameters
+
+    Attributes:
+        max_components_corpus: the maximum number of corpus-level, global components
+        max_components_document: the maximum number of document-level components
+        variational_params: tuple of lists of parameters contains variational parameters
+        hyper_params: tuple of paramters contains hyper parameters
+        training_monitors: dictionary contains the training monitoring measures (i.e., training lowerbound)
+        learning_hyperparams: inference hyper-parameters
+        whiten_params: statistics needed for the whitening process
+    """
     max_components_corpus: int
     max_components_document: int
     variational_params: tuple[list[NormalWishartParameters],
@@ -49,7 +62,11 @@ def lnB(
     nu: float,
     logdet_W: Optional[float] = None
 ) -> float:
-    """
+    """ compute :math:`log B(x)` from Bishop PRML B.79
+
+    .. math::
+        B(W, \\nu) = |W|^{\\frac{-\\nu}{2}} \\Big( 2^{\\frac{\\nu D}{2}} \\pi^{\\frac{D(D-1)}{4}} \\prod_{i=1}^{D} \\Gamma \\big( \\frac{\\nu + 1 - i}{2} \\big) \\Big)^{-1}
+
     """
     d = W.shape[0]
     range_d = torch.arange(d).to(W.device)
@@ -77,7 +94,12 @@ def compute_ln_p_phi_x(
     beta: torch.Tensor,
     nu: torch.Tensor
 ) -> torch.Tensor:
-    """
+    """ compute :math:`log p(x|\phi)`
+
+
+    here we compute the variational likelihood of observation given
+    latent variables of this iteration.
+
     """
     K = m.shape[0]
     M, max_len, D = data_batch.shape
@@ -110,7 +132,10 @@ def compute_corpus_stick(
     max_components_corpus: int,
     params: dict[str, torch.Tensor]
 ) -> dict[str, torch.Tensor]:
-    """
+    """ compute corpus-level stick proportions
+
+    variational corpus-level stick proportions are computed.
+
     """
     K = max_components_corpus
     corpus_stick = {}
@@ -146,7 +171,10 @@ def compute_document_stick(
     a: torch.Tensor,
     b: torch.Tensor
 ) -> dict[str, torch.Tensor]:
-    """
+    """ compute document-level stick proportions
+
+    variational document-level stick proportions are computed.
+
     """
     M = a.shape[0]  # batch_size
     T = max_components_document
@@ -178,7 +206,11 @@ def compute_normalwishart_probs(
     nu0: float,
     beta0: float
 ) -> float:
-    """
+    """ compute variational Normal-Wishart probability
+
+    compute variational expectation of Normal-Wishart probability
+    (see Eq 10.74 from (Bishop 2006))
+
     """
     K, D = m.shape
     _log2pi = _LOG_2PI.detach().clone().to(m.device)
@@ -239,7 +271,17 @@ def e_step(
 ) -> tuple[float,                    # mini-batch likelihood
            dict[str, torch.Tensor],  # document stick latent vars inference
            Optional[torch.Tensor]]:  # responsibilities (optional)
-    """
+    """ compute expectation step (of variational inference)
+
+    this step iteratively infer the latent variables such as document-level sticks
+    and variational selector parameter :math:`\\varphi` and :math:`\zeta`.
+
+    the internal loop for the iterative update terminates when the improvement
+    of the mini-batch likelihood converges up to the small constant (threshold) set.
+
+    Once the inner loop is terminated, cumulator variables for further computing
+    sufficient statistics are updated.
+
     """
     M = data_batch.shape[0]
     T = params['a'].shape[1] + 1
@@ -418,7 +460,12 @@ def m_step(
     cov_reg_weight: float = 1e-6,
     eps: float = torch.finfo().eps
 ):
-    """
+    """ compute M-Step of variational inference
+
+    using the "local" updates of latent variables for given mini-batch,
+    the "global" variables are updated including corpus-level
+    Gaussian-Wishart parameters and corpus-level sticks
+
     """
     J = n_total_docs
     M = batch_size
@@ -483,7 +530,12 @@ def update_parameters(
     corpus_level_params: set[str] = CORPUS_LEVEL_PARAMS,
     eps: float = 1e-6  # for regularizing precision matrix
 ):
-    """
+    """ update parameters from the current local optima
+
+    from the optimal parameter for a random mini-batch, global parameters
+    are updated up to the "update/mixing proportion" decaying over
+    the number of iterations (which is controlled by :math:`\kappa` and :math:`\\tau_{0}`).
+
     """
     K, D = params['m'].shape
 
@@ -536,7 +588,20 @@ def _init_params(
 ) -> dict[str, Union[torch.Tensor,
                      float,
                      list[float]]]:
-    """
+    """ initialize the parameters
+
+    initialize the parameters based on the uniformly random over the given data
+    if it's set as "warm_start", it populates the parameters from them and
+    continue the training.
+
+    (this is a private function and will be called within upper level parameter
+     initialization function.)
+
+    TODO: current initialize scheme can be quite expensive for a certain setup
+          (i.e., large batch-size, or the dimensionality of the feature, etc.)
+
+    TODO: a few re-factoring seems necessary as current form is VERY dirty.
+
     """
     J = len(loader.dataset)
     K = max_components_corpus
@@ -763,7 +828,10 @@ def _init_hyperpriors(
            npt.ArrayLike,
            npt.ArrayLike,
            npt.ArrayLike]:
-    """
+    """ set 'reasonable' initial hyperpriors from the given dataset
+
+    set the hyper-priors from the global stat (i.e., empirical mean and precision)
+
     """
     x_bar = None
     S = None
@@ -789,6 +857,7 @@ def _init_hyperpriors(
 
             prog.update()
 
+    # take the empirical mean / precision
     m0 = x_bar / N
     W0 = torch.linalg.inv((S / N) - torch.outer(m0, m0))
 
@@ -817,7 +886,10 @@ def init_params(
                            float,
                            list[float]]],
            dict[str, torch.Tensor]]:
-    """
+    """ initialize parameters
+
+    helper (wrapper) function that calls the parameter initialization
+
     """
     # get some vars set
     K = max_components_corpus
@@ -857,11 +929,13 @@ def init_temp_vars(
     data_batch: torch.Tensor,
     mask_batch: torch.BoolTensor
 ) -> dict[str, torch.Tensor]:
-    """
+    """ initialize the temporary variables
+
     initialize & allocate the temporary variables
-        mostly including latent variables (i.e., zeta / varphi)
+    mostly including latent variables (i.e., zeta / varphi)
+
     """
-    M, max_len, D = data_batch.shape
+    M, max_len, _ = data_batch.shape
     K = max_components_corpus
     T = max_components_document
     device = data_batch.device
@@ -879,7 +953,10 @@ def init_temp_vars(
 def reinit_ss(
     params: dict[str, torch.Tensor]
 ) -> None:
-    """
+    """ reset sufficient statistics containers
+
+    reset the values to the null value (0.)
+
     """
     for k in params['ss'].keys():
         params['ss'][k][:] = 0.
@@ -890,10 +967,10 @@ def package_model(
     max_components_document: int,
     params: dict[str, torch.Tensor],
     learning_hyperparams: dict[str, object],
-) -> dict[str, HDPGMM]:
-    """
-    # TODO: make this object more generalized
-    #       (not to depend on `bibim` and this package)
+) -> HDPGMM:
+    """ package model to parameter objects
+
+    re-format the parameter values into the `parameter` objects
     """
     # pack tensors to list of parameters
     y = params['y'].detach().cpu().numpy()
@@ -962,7 +1039,11 @@ def infer_documents(
     max_len: int = torch.iinfo(torch.int32).max,
     eps: float = torch.finfo().eps
 ) -> dict[str, torch.Tensor]:
-    """
+    """ infer latent variables for new inputs (documents)
+
+    compute latent variables for new samples (documents). It is useful for represent
+    the document into a vector which is handy for many downstream information processes.
+
     """
     K = model.max_components_corpus
     T = model.max_components_document
@@ -1069,7 +1150,10 @@ def save_state(
     prefix: str,
     it: int  # number of iteration so far
 ):
-    """
+    """ saving packaged state (parameters) to the disk
+
+    saving the parameters into the disk (using binary pickle)
+
     """
     ret = package_model(
         max_components_corpus,
@@ -1084,7 +1168,10 @@ def save_state(
 def load_model(
     fn: Union[str, Path],
 ) -> HDPGMM:
-    """
+    """ load saved state
+
+    load saved state (binary pickle) to the memory
+
     """
     if isinstance(fn, str):
         fn = Path(fn)
@@ -1127,8 +1214,75 @@ def variational_inference(
     eps: float = torch.finfo().eps,
     device: str = 'cpu',
     verbose: bool = False
-):
-    """
+) -> HDPGMM:
+    """ infer model parameters through online variational inference (VI)
+
+    the routine runs nested iterations for fitting the hierarchical Dirichlet process (HDP) GMM.
+    after initialization, for every outer loop, the routine first iterates the e-step inner loop
+    to infer the latent variables for given mini-batch of documents. The inner loop terminates
+    when the (variational) likelihood of the current mini-batch converges. Then the corpus-level
+    parameters are updated.
+
+    Args:
+        dataset: variable length sequence or bag-of-feature corpus.
+        max_components_corpus: the maximum number of corpus-level, global components
+        max_components_document: the maximum number of document-level components
+        n_epochs: the maximum number of iterations
+        batch_size: the number of samples included in a mini-batch
+        kappa: a parameter controlling the rate of learning rate decay function
+        tau0: a parameter controlling the `offset` of learning rate decay function
+        batch_update: if set True, corpus-level parameters are updated using the sufficient
+                      statistics cumulated from the entire dataset. if set False, it updates
+                      the corpus-level parameters using the local parameter estimation
+                      from the mini-batch, with exponentially decaying `mixing coefficient`
+                      (or `learning rate`).
+        m0: optional global mean prior. if not given, computes the global empirical mean
+            from the dataset
+        W0: similarly, optional global precision prior.
+        nu0: optional degree of freedom prior
+        beta0: optional precision scale prior
+        s1: prior for the first parameter of the corpus-level stick
+        s2: prior for the second parameter of the corpus-level stick
+        g1: prior for the first parameter of the document-level stick
+        g2: prior for the second parameter of the document-level stick
+        n_max_inner_iter: the maximum number of inner-iteration. Smaller number would
+                          accelerate the training process potentially sacrificing
+                          the likelihood.
+        e_step_tol: the threshold for the termination of the inner loop. The loop ends when
+                    the improvement of likelihood is smaller than the value.
+        base_noise_ratio: controls the amount of the regularization. This algorithm
+                          includes an additional regularization which `splashes` the uniform
+                          random noise to the `responsibility` vector per observation.
+                          the more the noise is added, the stronger the regularization is applied.
+        full_uniform_init: if set True, the parameters are initialized by populating
+                           random responsibilities from the uniform distribution.
+                           if set False, random responsibilities are populated from
+                           random integer (indicator for components), drawn from uniform
+                           categorical distribution with length of `max_components_corpus`.
+        share_alpha0: if set True, the model let the document-level stick shares the single
+                      alpha0. Otherwise, model fits alpha0 per document, which increases the
+                      degree of freedom, while it may let the model overfit.
+        data_parallel_num_workers: set the number of parallel processes for loading
+                                   the data using multicores.
+        warm_start_with: if given, the inference routine continues from the point the
+                         `checkpoint` is saved.
+        max_len: as this implementation adopts the masked tensor approach for handling
+                 the variable length data object, it can be extremely inefficient there
+                 is a small number of significantly longer documents. To save memory,
+                 this variable randomly sub-sequences those of documents longer than
+                 the value. It is adjustable for memory efficiency in mind, while it
+                 will affect the inference.
+        save_every: save the checkpoint of the inferred model with this frequency
+        out_path: path where the checkpoints are saved
+        prefix: template (prefix) for the saved checkpoint files
+        eps: small floating point value that is used for the threshold of the termination
+             of the inner inference iterations
+        device: target computation device {'cpu', 'cuda0', ...}
+        verbose: set verbosity.
+
+    Returns:
+        inferred model in the `HDPGMM` dataclass.
+
     """
     ####################
     # Setup Dataloader

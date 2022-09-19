@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
-import librosa
+# import librosa
 
 import h5py
 from tqdm import tqdm
@@ -15,6 +15,21 @@ import torchaudio.functional as F
 
 
 class HDFMultiVarSeqDataset(Dataset):
+    """
+    It extends pytorch's `Dataclass` to handle documents with variable length
+    sequence/bag-of-features. It assumes the preprocessed HDF file is stored
+    and this class fetching the data dynamically from the file through
+    the open connection. (per every call of `__getitem__`)
+
+    Attributes:
+        h5_fn (Union[str, :obj:Path]): path to the HDF file
+        whiten (bool): if set True, the dataset precompute the relevant parameters
+                       at initialization and whitening the data.
+        chunk_size (:obj:int): it is used to determine the length of the data when
+                          whitening parameters are computed to save memory.
+        verbose (bool): if set True, the progress of computing parameters for
+                        whitening is reported in the standard output.
+    """
     def __init__(
         self,
         h5_fn: Union[str, Path],
@@ -22,8 +37,6 @@ class HDFMultiVarSeqDataset(Dataset):
         chunk_size: int=1024,
         verbose: bool=False
     ):
-        """
-        """
         self.h5_fn = h5_fn
         self.whiten = whiten
         self.chunk_size = chunk_size
@@ -45,7 +58,15 @@ class HDFMultiVarSeqDataset(Dataset):
         self,
         idx: int
     ) -> tuple[int, torch.Tensor]:
-        """
+        """ fetch a single document
+
+        calling this, one can get document. (variable length, sequence of multivariate vectors)
+
+        Args:
+            idx: index for the document to be fetched
+
+        Returns:
+            a tuple of index and the tensor corresponding to given input index
         """
         with h5py.File(self.h5_fn, 'r') as hf:
             # index frames/tokens
@@ -60,8 +81,17 @@ class HDFMultiVarSeqDataset(Dataset):
 
         return (idx, x)
 
-    def apply_whitening(self, x):
-        """
+    def apply_whitening(
+        self,
+        x: npt.ArrayLike
+    ) -> npt.ArrayLike:
+        """ apply whitening to the input data x
+
+        Args:
+            x: data fetched to be processed, from HDF file
+
+        Returns:
+            whitened tensor
         """
         if self.whiten:
             x -= self._whitening_params['mean'][None]
@@ -69,7 +99,9 @@ class HDFMultiVarSeqDataset(Dataset):
         return x
 
     def _init_whitening(self):
-        """
+        """ initialize whitening parameters
+
+        it computes parameters needed for whitening process using given dataset.
         """
         # compute whitening parameters
         with h5py.File(self.h5_fn, 'r') as hf:
@@ -131,11 +163,17 @@ class AudioDataset(Dataset):
 def collate_var_len_seq(
     samples: list[tuple[int, torch.Tensor]],
     max_len: Optional[int] = None,
-    min_len: Optional[int] = 128
 ) -> tuple[torch.BoolTensor,      # mask_batch
            torch.Tensor,      # data_batch
            torch.LongTensor]: # batch_idx
-    """
+    """ collate variable length sequence / bag-of-features into masked tensor
+
+    Args:
+        samples: list of indices and corresponding variable length documents to be collated
+        max_len: threshold to cut off the substantially long sequence
+
+    Returns:
+        tuple of processed tensors (i.e., mask, data, indices).
     """
     if max_len is None:
         max_len = torch.inf
@@ -164,76 +202,27 @@ def collate_var_len_seq(
     return mask, data_batch_mat, batch_idx
 
 
-def ext_mel(
-    y: npt.ArrayLike,
-    sr: int,
-    n_fft: int = 2048,
-    hop_length: int = 512,
-    db_scale: bool = True
-) -> npt.ArrayLike:
-    """
-    """
-    m = librosa.feature.melspectrogram(
-        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length,
-    )
-    if db_scale:
-        m = librosa.power_to_db(m)
-    return m.T
-
-
-def ext_feature(
-    y: npt.ArrayLike,
-    sr: int,
-    n_fft: int = 2048,
-    hop_length: int = 512,
-    n_mfcc: int = 13,
-    features: set[str] = {'mfcc', 'dmfcc', 'ddmfcc', 'chroma'}
-) -> npt.ArrayLike:
-    """
-    """
-    assert any([
-        feature not in {'mfcc', 'dmfcc', 'ddmfcc', 'chroma'}
-        for feature in features
-    ])
-    assert len(features) > 0
-
-    m = librosa.feature.mfcc(
-        y=y, sr=sr, n_fft=n_fft, hop_length=hop_length, n_mfcc=n_mfcc
-    )
-
-    features_ = []
-    if 'mfcc' in features:
-        features_.append(m)
-
-    if 'dmfcc' in features:
-        dm = librosa.feature.delta(m, order=1)
-        features_.append(dm)
-
-    if 'ddmfcc' in features:
-        ddm = librosa.feature.delta(m, order=2)
-        features_.append(ddm)
-
-    if 'chroma' in features:
-        chrm = librosa.feature.chroma_stft(
-            y=y, sr=sr, n_fft=n_fft, hop_length=hop_length
-        )
-        features_.append(chrm)
-
-    # concatenate features
-    if len(features_) > 1:
-        features_ = np.concatenate(features_, axis=1)
-    else:
-        features_ = features_[0]
-
-    return features_.T  # (n_frames/n_tokens, dim)
-
-
 def compute_global_mean_cov(
     hf: h5py.File,
     chunk_size: int=1024,
     verbose: bool=False
 ) -> dict[str, npt.ArrayLike]:
-    """
+    """ compute global gaussian statistics (mean and covariance)
+
+    It also computes precision and its Cholesky decomposition, which are
+    useful for some of the other computations involved in the HDPGMM VI inference.
+
+    Args:
+        hf: HDF file object via h5py.File
+        chunk_size: it is used to determine the length of the data when
+                    whitening parameters are computed to save memory.
+        verbose: if set True, the progress of computing parameters for
+                 whitening is reported in the standard output.
+
+    Returns:
+        computed statistics stored in a dictionary. the keys are the
+        name of the statistics (i.e., mean) and values are tensor containing
+        the computed values.
     """
     n = hf['data'].shape[0]
     x_sum = 0.

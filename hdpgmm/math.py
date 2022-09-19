@@ -2,11 +2,20 @@ from typing import Optional
 import torch
 
 
-def th_logdotexp(A, B):
+def th_logdotexp(
+    A: torch.Tensor,
+    B: torch.Tensor
+) -> torch.Tensor:
     """
-    numerically safer dot between
-    exponentiated logged matrices and
+    numerically safer dot between exponentiated logged matrices and
     putting the result back to logarithm
+
+    Args:
+        A: left tensor
+        B: right tensor
+
+    Returns:
+        resulted tensor of logdotexp
     """
     max_A = torch.max(A)
     max_B = torch.max(B)
@@ -16,7 +25,23 @@ def th_logdotexp(A, B):
     return C
 
 
-def th_batch_logdotexp_2d(A, B):
+def th_batch_logdotexp_2d(
+    A: torch.Tensor,
+    B: torch.Tensor
+) -> torch.Tensor:
+    """
+    numerically safer dot between exponentiated logged matrices and
+    putting the result back to logarithm. This function support the
+    `batchdot` equivalent routine for logdotexp. The first axis represents
+    the number of matrices of the targets of logdotexp
+
+    Args:
+        A: left tensor
+        B: right tensor
+
+    Returns:
+        resulted tensor of batch logdotexp
+    """
     max_A = torch.amax(A, dim=(1, 2))[:, None, None]
     max_B = torch.amax(B, dim=(1, 2))[:, None, None]
     C = torch.bmm((A - max_A).exp(), (B - max_B).exp())
@@ -32,8 +57,13 @@ def th_masked_logsumexp(
     mask: Optional[torch.Tensor]=None,
     max_offset_thrd: float=-1e10
 ):
-    """Numerically stable logsumexp on the last dim of `inputs`.
-       reference: https://github.com/pytorch/pytorch/issues/2591
+    """ Numerically stable logsumexp on the last dim of `inputs`.
+
+    reference: https://github.com/pytorch/pytorch/issues/2591
+
+    NOTE: this function is based on this implementation:
+        https://gist.github.com/pcyin/b027ffec9b1bc1b87ba02286b55c2484
+
     Args:
         inputs: A Variable with any shape.
         keepdim: A boolean.
@@ -41,9 +71,6 @@ def th_masked_logsumexp(
               **ATTENTION** invalid entries are masked to **ONE**, not ZERO
     Returns:
         Equivalent of log(sum(exp(inputs), keepdim=keepdim)).
-
-    NOTE: this function is based on this implementation:
-        https://gist.github.com/pcyin/b027ffec9b1bc1b87ba02286b55c2484
     """
 
     if mask is not None:
