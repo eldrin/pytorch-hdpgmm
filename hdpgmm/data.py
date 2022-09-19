@@ -22,10 +22,10 @@ class HDFMultiVarSeqDataset(Dataset):
     the open connection. (per every call of `__getitem__`)
 
     Attributes:
-        h5_fn (Union[str, :obj:Path]): path to the HDF file
+        h5_fn (Union[str, :obj:`Path`]): path to the HDF file
         whiten (bool): if set True, the dataset precompute the relevant parameters
                        at initialization and whitening the data.
-        chunk_size (:obj:int): it is used to determine the length of the data when
+        chunk_size (:obj:`int`): it is used to determine the length of the data when
                           whitening parameters are computed to save memory.
         verbose (bool): if set True, the progress of computing parameters for
                         whitening is reported in the standard output.
