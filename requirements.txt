@@ -1,5 +1,6 @@
 numpy
 scipy
 torch
+torchaudio
 h5py
 tqdm
