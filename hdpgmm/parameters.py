@@ -64,6 +64,10 @@ class NormalWishartParameters(Parameters):
             contains :math:`E_{q}[\\eta]`, which follows (Blei and Jordan 2006)
         Eq_a_eta (:obj:`numpy.typing.NDArray`):
             contains :math:`E_{q}[a(\\eta)]`, which follows (Blei and Jordan 2006)
+        stable (bool): with this flag, the "square root" of the precision matrix W
+                       is computed using the SVD with forcefully truncating the
+                       eigenvalues larger or equal to zero. If not set, it is
+                       computed by the Cholesky decomposition.
     """
     mu0: npt.NDArray[np_float]
     lmbda: float
@@ -71,21 +75,37 @@ class NormalWishartParameters(Parameters):
     nu: float
     keep_inverse_W: bool=False
     W_inv: Optional[npt.NDArray[np_float]] = field(init=False)
+    stable: bool=True
 
     def __post_init__(self):
         d = self.mu0.shape[0]
+
+        if self.stable:
+            U, s, _ = np.linalg.svd(self.W)
+            # truncate the non-zero eigen values (dirty hack to make the
+            # reconstructed W to be somehow positive semi-definitive
+            s[s < 0] = 0.
+            self.W_chol = U @ np.diag(np.sqrt(s))
+            self.W = self.W_chol @ self.W_chol.T   # we do the cheating here as well
+
+            # https://math.stackexchange.com/a/2001054
+            self.logdet_W = np.log(np.maximum(
+                np.diag(self.W_chol), np.finfo('float').eps * 10
+            )).sum()
+
+        else:
+            self.W_chol = np.linalg.cholesky(self.W)
+
+            sign, self.logdet_W = np.linalg.slogdet(self.W)
+            if sign <= 0.:
+                raise ValueError(
+                    '[ERROR] log determinant of precision prior W is not defined!'
+                )
 
         if self.keep_inverse_W:
             self.W_inv = np.linalg.inv(self.W)
         else:
             self.W_inv = None
-
-        self.W_chol = np.linalg.cholesky(self.W)
-        sign, self.logdet_W = np.linalg.slogdet(self.W)
-        if sign <= 0.:
-            raise ValueError(
-                '[ERROR] log determinant of precision prior W is not defined!'
-            )
 
         # first natural parameter
         # (the second one Eq[eta2] is computed directly using
