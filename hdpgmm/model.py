@@ -56,6 +56,132 @@ class HDPGMM:
     learning_hyperparams: dict[str, object]
     whiten_params: Optional[dict[str, npt.ArrayLike]] = None
 
+    def save(
+        self,
+        path: str
+    ) -> None:
+        """ save parameters to the disk
+
+        Args:
+            path: filename that is used to save parameters to disk
+        """
+        # get all the data and save it into HDPGMM (w/ th.Tensor as containor)
+        nws, dps, gammas_corpus, gammas_docs = self.variational_params
+        nw0, gamma0_corpus, gamma0_docs = self.hyper_params
+        variational_params = [
+            tuple(map(torch.from_numpy,
+                      map(np.array,
+                          zip(*[(nw.mu0, nw.lmbda, nw.W, nw.nu)
+                                for nw in nws])))),
+            (dps.max_components, dps.alphas, dps.betas),
+            (torch.tensor(gammas_corpus.alpha), torch.tensor(gammas_corpus.beta)),
+            (
+                (torch.tensor(gammas_docs.alpha), torch.tensor(gammas_docs.beta))
+                if not isinstance(gammas_docs, list) else
+                tuple(map(torch.from_numpy,
+                          map(np.array,
+                              zip(*[(g.alpha, g.beta)
+                                    for g in gammas_docs]))))
+            )
+        ]
+        hyper_params = [
+            tuple(map(torch.tensor, [nw0.mu0, nw0.lmbda, nw0.W, nw0.nu])),
+            (torch.tensor(gamma0_corpus.alpha), torch.tensor(gamma0_corpus.beta)),
+            (torch.tensor(gamma0_docs.alpha), torch.tensor(gamma0_docs.beta)),
+        ]
+        training_monitors = {
+            k: torch.tensor(v) for k, v in self.training_monitors.items()
+        }
+        if self.whiten_params is not None:
+            whiten_params = {
+                k: torch.tensor(v) for k, v in self.whiten_params.items()
+            }
+        else:
+            whiten_params = None
+
+        # save
+        checkpoint = {
+            'max_components_corpus': self.max_components_corpus,
+            'max_components_document': self.max_components_document,
+            'variational_params': variational_params,
+            'hyper_params': hyper_params,
+            'training_monitors': training_monitors,
+            'whiten_params': whiten_params
+        }
+        torch.save(checkpoint, path)
+
+    @classmethod
+    def load(
+        cls,
+        path: str
+    ) -> "HDPGMM":
+        """ load saved paraeters to the memory
+
+        Args:
+            path: filename of the checkpoint
+
+        Returns:
+            an instance of HDPGMM storing the parameter checkpoint.
+        """
+        # load parameters
+        params = torch.load(path)
+
+        var_params = params['variational_params']
+        hyp_params = params['hyper_params']
+
+        normal_wisharts = [
+            NormalWishartParameters(m_.numpy(),
+                                    beta_.item(),
+                                    W_.numpy(),
+                                    nu_.item())
+            for m_, beta_, W_, nu_
+            in var_params[0]
+        ]
+        dps_corpus = DPParameters(var_params[1][0],
+                                  var_params[1][1].numpy(),
+                                  var_params[1][2].numpy())
+
+        alpha_gamma_corpus = GammaParameters(var_params[2][0].item(),
+                                             var_params[2][1].item())
+        if params['learning_params']['share_alpha0']:
+            alpha_gamma_doc = GammaParameters(var_params[3][0].item(),
+                                              var_params[3][1].item())
+        else:
+            alpha_gamma_doc = [
+                GammaParameters(w_[0].item(), w_[1].item())
+                for w_ in var_params[4]
+            ]
+
+        return cls(
+            params['max_components_corpus'],
+            params['max_components_document'],
+            variational_params = (
+                normal_wisharts,
+                dps_corpus,
+                alpha_gamma_corpus,
+                alpha_gamma_doc
+            ),
+            hyper_params = (
+                NormalWishartParameters(
+                    hyp_params[0][0].numpy(),
+                    hyp_params[0][1].item(),
+                    hyp_params[0][2].numpy(),
+                    hyp_params[0][3].item()
+                ),
+                GammaParameters(hyp_params[1][0].item(),
+                                hyp_params[1][1].item()),
+                GammaParameters(hyp_params[2][0].item(),
+                                hyp_params[2][1].item())
+            ),
+            training_monitors = {
+                k: v.numpy().tolist()
+                for k, v in params['training_monitors']
+            },
+            learning_hyperparams = params['learning_hyperparams'],
+            whiten_params = params['whiten_params']
+        )
+
+
 
 def lnB(
     W: torch.Tensor,
