@@ -16,6 +16,7 @@ from tqdm import tqdm
 from .data import (HDFMultiVarSeqDataset,
                    collate_var_len_seq)
 from .math import th_masked_logsumexp as masked_logsumexp
+from .math import mat_sqrt
 from .parameters import (DPParameters,
                          NormalWishartParameters,
                          GammaParameters)
@@ -108,12 +109,14 @@ def compute_ln_p_phi_x(
 
     # compute Eq_eta
     for k in range(K):
-        if W_isposdef[k]:
-            Wx_k = (data_batch - m[k]) @ W_chol[k]
-            Wx_k = (Wx_k**2).sum(-1)
-        else:
-            dif = (data_batch - m[k])
-            Wx_k = ((dif @ W[k]) * dif).sum(-1)
+        # if W_isposdef[k]:
+        #     Wx_k = (data_batch - m[k]) @ W_chol[k]
+        #     Wx_k = (Wx_k**2).sum(-1)
+        # else:
+        #     dif = (data_batch - m[k])
+        #     Wx_k = ((dif @ W[k]) * dif).sum(-1)
+        Wx_k = (data_batch - m[k]) @ W_chol[k]
+        Wx_k = (Wx_k**2).sum(-1)
         Wx_k *= mask_batch
 
         Eq_eta[:, :, k] = (
@@ -528,6 +531,7 @@ def update_parameters(
     old_params: dict[str, torch.Tensor],
     batch_update: bool = False,
     corpus_level_params: set[str] = CORPUS_LEVEL_PARAMS,
+    stable: bool = True,
     eps: float = 1e-6  # for regularizing precision matrix
 ):
     """ update parameters from the current local optima
@@ -553,12 +557,11 @@ def update_parameters(
     W = torch.linalg.inv(params['C'] * params['nu'][:, None, None])
     # W = torch.linalg.inv(params['C'])
 
-    L, info = torch.linalg.cholesky_ex(W)
-    assert info.sum() == 0
+    (W, L, isposdef, logdet) = mat_sqrt(W, method='svd', ensure_pos_semidef=stable)
     params['W'].copy_(W)
-    params['W_isposdef'].copy_(info == 0)
     params['W_chol'].copy_(L)
-    params['W_logdet'].copy_(torch.linalg.slogdet(W).logabsdet)
+    params['W_isposdef'].copy_(isposdef)
+    params['W_logdet'].copy_(logdet)
 
     # to compute the full Eq[log|lambda_k|]
     arange_d = torch.arange(D, device=params['m'].device)
@@ -609,7 +612,6 @@ def _init_params(
     N_ = loader.dataset._raw_nrow
     D = loader.dataset.dim
     W0_inv = np.linalg.inv(W0)
-
 
     if (warm_start_with is not None and
             isinstance(warm_start_with, HDPGMM)):
@@ -756,14 +758,6 @@ def _init_params(
     # some pre-computations for computing Eq[eta] and Eq[a(eta)]
     W = np.linalg.inv(C * nu[:, None, None])
     # W = np.linalg.inv(C)
-    W_logdet = np.linalg.slogdet(W)[1]
-
-    # to compute the full Eq[log|lambda_k|]
-    for k in range(K):
-        W_logdet[k] += (
-            digamma((nu[k] - np.arange(D)) * .5).sum()
-            + D * _LOG_2
-        )
 
     # prep the containor
     params = {}
@@ -783,10 +777,18 @@ def _init_params(
     params['b'] = torch.as_tensor(b, dtype=torch.float32, device=device)
     params['w'] = torch.as_tensor(w, dtype=torch.float32, device=device)
     params['w2'] = torch.as_tensor(w2, dtype=torch.float32, device=device)
-    L, info = torch.linalg.cholesky_ex(params['W'])
-    params['W_chol'] = torch.as_tensor(L, dtype=torch.float32, device=device)
-    params['W_isposdef'] = info == 0
-    params['W_logdet'] = torch.as_tensor(W_logdet, dtype=torch.float32, device=device)
+
+    params['W'], params['W_chol'], params['W_isposdef'], params['W_logdet'] = (
+        mat_sqrt(params['W'], method='svd', ensure_pos_semidef=True)
+    )
+
+    # to compute the full Eq[log|lambda_k|]
+    range_d = torch.arange(D).to(device)
+    for k in range(K):
+        params['W_logdet'][k] += (
+            torch.digamma((params['nu'][k] - range_d) * .5).sum()
+            + D * _LOG_2.item()
+        )
 
     # copying (wrapping to torch Tensors) hyper-priors
     params['m0'] = torch.as_tensor(m0, dtype=torch.float32, device=device)
