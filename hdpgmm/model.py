@@ -58,7 +58,7 @@ class HDPGMM:
 
     def save(
         self,
-        path: str
+        path: Union[str, Path]
     ) -> None:
         """ save parameters to the disk
 
@@ -73,7 +73,9 @@ class HDPGMM:
                       map(np.array,
                           zip(*[(nw.mu0, nw.lmbda, nw.W, nw.nu)
                                 for nw in nws])))),
-            (dps.max_components, dps.alphas, dps.betas),
+            (dps.max_components,
+             torch.tensor(dps.alphas),
+             torch.tensor(dps.betas)),
             (torch.tensor(gammas_corpus.alpha), torch.tensor(gammas_corpus.beta)),
             (
                 (torch.tensor(gammas_docs.alpha), torch.tensor(gammas_docs.beta))
@@ -105,6 +107,7 @@ class HDPGMM:
             'max_components_document': self.max_components_document,
             'variational_params': variational_params,
             'hyper_params': hyper_params,
+            'learning_hyperparams': self.learning_hyperparams,
             'training_monitors': training_monitors,
             'whiten_params': whiten_params
         }
@@ -113,7 +116,7 @@ class HDPGMM:
     @classmethod
     def load(
         cls,
-        path: str
+        path: Union[str, Path]
     ) -> "HDPGMM":
         """ load saved paraeters to the memory
 
@@ -130,12 +133,11 @@ class HDPGMM:
         hyp_params = params['hyper_params']
 
         normal_wisharts = [
-            NormalWishartParameters(m_.numpy(),
-                                    beta_.item(),
-                                    W_.numpy(),
-                                    nu_.item())
-            for m_, beta_, W_, nu_
-            in var_params[0]
+            NormalWishartParameters(var_params[0][0][k].numpy(),
+                                    var_params[0][1][k].item(),
+                                    var_params[0][2][k].numpy(),
+                                    var_params[0][3][k].item())
+            for k in range(params['max_components_corpus'])
         ]
         dps_corpus = DPParameters(var_params[1][0],
                                   var_params[1][1].numpy(),
@@ -143,13 +145,13 @@ class HDPGMM:
 
         alpha_gamma_corpus = GammaParameters(var_params[2][0].item(),
                                              var_params[2][1].item())
-        if params['learning_params']['share_alpha0']:
+        if params['learning_hyperparams']['share_alpha0']:
             alpha_gamma_doc = GammaParameters(var_params[3][0].item(),
                                               var_params[3][1].item())
         else:
             alpha_gamma_doc = [
                 GammaParameters(w_[0].item(), w_[1].item())
-                for w_ in var_params[4]
+                for w_ in var_params[3]
             ]
 
         return cls(
@@ -175,10 +177,12 @@ class HDPGMM:
             ),
             training_monitors = {
                 k: v.numpy().tolist()
-                for k, v in params['training_monitors']
+                for k, v in params['training_monitors'].items()
             },
             learning_hyperparams = params['learning_hyperparams'],
-            whiten_params = params['whiten_params']
+            whiten_params = {
+                k:v.numpy() for k, v in params['whiten_params'].items()
+            }
         )
 
 
@@ -1287,8 +1291,7 @@ def save_state(
         params, learning_hyperparams
     )
     path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
-    with path.open('wb') as fp:
-        pkl.dump(ret, fp)
+    ret.save(path)
 
 
 def load_model(
