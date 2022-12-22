@@ -1290,7 +1290,7 @@ def save_state(
         max_components_document,
         params, learning_hyperparams
     )
-    path = Path(out_path) / f'{prefix}_it{it:d}.pkl'
+    path = Path(out_path) / f'{prefix}_it{it:d}.pth'
     ret.save(path)
 
 
@@ -1305,10 +1305,7 @@ def load_model(
     if isinstance(fn, str):
         fn = Path(fn)
     assert fn.exists()
-
-    with fn.open('rb') as fp:
-        model = pkl.load(fp)
-
+    model = HDPGMM.load(fn)
     return model
 
 
