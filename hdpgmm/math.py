@@ -135,7 +135,9 @@ def mat_sqrt(
         L, info = torch.linalg.cholesky_ex(A)
         is_bad = info.sum() != 0
         if is_bad and ensure_pos_semidef:
-            L, info = torch.linalg.cholesky_ex(A + eps * torch.eye(A.shape[-1]))
+            L, info = torch.linalg.cholesky_ex(
+                A + eps * torch.eye(A.shape[-1], device=A.device)
+            )
 
     elif method == 'eig':
         U, d = torch.linalg.eig(A)
