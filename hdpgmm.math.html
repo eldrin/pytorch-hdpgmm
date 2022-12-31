@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hdpgmm.math Module &mdash; pytorch-hdpgmm 0.0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="hdpgmm.model Module" href="hdpgmm.model.html" />
+    <link rel="prev" title="hdpgmm.data Module" href="hdpgmm.data.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> pytorch-hdpgmm
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.data.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.data</span></code> Module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.math.th_logdotexp"><code class="docutils literal notranslate"><span class="pre">th_logdotexp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.math.th_batch_logdotexp_2d"><code class="docutils literal notranslate"><span class="pre">th_batch_logdotexp_2d()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.math.th_masked_logsumexp"><code class="docutils literal notranslate"><span class="pre">th_masked_logsumexp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.math.mat_sqrt"><code class="docutils literal notranslate"><span class="pre">mat_sqrt()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.model.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.model</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.parameters.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pytorch-hdpgmm</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active"><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/hdpgmm.math.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-hdpgmm.math">
+<span id="hdpgmm-math-module"></span><h1><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module<a class="headerlink" href="#module-hdpgmm.math" title="Permalink to this heading"></a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="hdpgmm.math.th_logdotexp">
+<span class="sig-prename descclassname"><span class="pre">hdpgmm.math.</span></span><span class="sig-name descname"><span class="pre">th_logdotexp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#hdpgmm.math.th_logdotexp" title="Permalink to this definition"></a></dt>
+<dd><p>numerically safer dot between exponentiated logged matrices and
+putting the result back to logarithm</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>A</strong> – left tensor</p></li>
+<li><p><strong>B</strong> – right tensor</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>resulted tensor of logdotexp</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="hdpgmm.math.th_batch_logdotexp_2d">
+<span class="sig-prename descclassname"><span class="pre">hdpgmm.math.</span></span><span class="sig-name descname"><span class="pre">th_batch_logdotexp_2d</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">B</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#hdpgmm.math.th_batch_logdotexp_2d" title="Permalink to this definition"></a></dt>
+<dd><p>numerically safer dot between exponentiated logged matrices and
+putting the result back to logarithm. This function support the
+<cite>batchdot</cite> equivalent routine for logdotexp. The first axis represents
+the number of matrices of the targets of logdotexp</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>A</strong> – left tensor</p></li>
+<li><p><strong>B</strong> – right tensor</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>resulted tensor of batch logdotexp</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="hdpgmm.math.th_masked_logsumexp">
+<span class="sig-prename descclassname"><span class="pre">hdpgmm.math.</span></span><span class="sig-name descname"><span class="pre">th_masked_logsumexp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">inputs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keepdim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_offset_thrd</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-10000000000.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tensor</span></span></span><a class="headerlink" href="#hdpgmm.math.th_masked_logsumexp" title="Permalink to this definition"></a></dt>
+<dd><p>Numerically stable logsumexp on the last dim of <cite>inputs</cite>.</p>
+<p>reference: <a class="reference external" href="https://github.com/pytorch/pytorch/issues/2591">https://github.com/pytorch/pytorch/issues/2591</a></p>
+<dl class="simple">
+<dt>NOTE: this function is based on this implementation:</dt><dd><p><a class="reference external" href="https://gist.github.com/pcyin/b027ffec9b1bc1b87ba02286b55c2484">https://gist.github.com/pcyin/b027ffec9b1bc1b87ba02286b55c2484</a></p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>inputs</strong> – A Variable with any shape.</p></li>
+<li><p><strong>keepdim</strong> – A boolean.</p></li>
+<li><p><strong>mask</strong> – A mask variable of type float. It has the same shape as <cite>inputs</cite>.
+<strong>ATTENTION</strong> invalid entries are masked to <strong>ONE</strong>, not ZERO</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Equivalent of log(sum(exp(inputs), keepdim=keepdim)).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="hdpgmm.math.mat_sqrt">
+<span class="sig-prename descclassname"><span class="pre">hdpgmm.math.</span></span><span class="sig-name descname"><span class="pre">mat_sqrt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cholesky'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ensure_pos_semidef</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.Tensor</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">torch.float32</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#hdpgmm.math.mat_sqrt" title="Permalink to this definition"></a></dt>
+<dd><p>Compute “square root” of the given symmetric matrix</p>
+<p>It computes the “square root” of the given symmetric matrix. It provides
+several methods, including the Cholesky decomposition (default), SVD,
+and finally eigen decomposition. The implementation is based on <a class="reference external" href="https://nl.mathworks.com/matlabcentral/answers/225177-chol-gives-error-for-a-barely-positive-definite-matrix#answer_332354">here</a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>A</strong> – input real symmetric matrix</p></li>
+<li><p><strong>method</strong> – specifying which method is used. {‘cholesky’, ‘svd’, ‘eig’}</p></li>
+<li><p><strong>ensure_pos_semidef</strong> – if True, it tries to fix the issue by some tricks.
+however most of the case it should be used very carefully
+otherwise it’ll just produce a degenerated outcome</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><p>the input matrix A, which could be reconstructed from adjusted square root matrix of it
+L: the decomposition of the input matrix which by computing the dot product</p>
+<blockquote>
+<div><p>of itself can recover the input matrix</p>
+</div></blockquote>
+<p>isposdef: boolean indicate the given matrix is positive semi definite
+abslogdet: absolute log determinant computed from <code class="xref py py-obj docutils literal notranslate"><span class="pre">torch.linalg.slogdet</span></code></p>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>A</p>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><p><strong>ValueError if method is not supported</strong> – </p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="hdpgmm.data.html" class="btn btn-neutral float-left" title="hdpgmm.data Module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="hdpgmm.model.html" class="btn btn-neutral float-right" title="hdpgmm.model Module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jaehun Kim.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

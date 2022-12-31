@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to pytorch-hdpgmm’s documentation! &mdash; pytorch-hdpgmm 0.0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="hdpgmm.data Module" href="hdpgmm.data.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="#" class="icon icon-home"> pytorch-hdpgmm
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.data.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.data</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.math.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.model.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.model</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.parameters.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">pytorch-hdpgmm</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active">Welcome to pytorch-hdpgmm’s documentation!</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="welcome-to-pytorch-hdpgmm-s-documentation">
+<h1>Welcome to pytorch-hdpgmm’s documentation!<a class="headerlink" href="#welcome-to-pytorch-hdpgmm-s-documentation" title="Permalink to this heading"></a></h1>
+<section id="pytorch-hdpgmm">
+<h2>PyTorch-HDPGMM<a class="headerlink" href="#pytorch-hdpgmm" title="Permalink to this heading"></a></h2>
+<p>a <code class="docutils literal notranslate"><span class="pre">pytorch</span></code> implementation of <code class="docutils literal notranslate"><span class="pre">hierarchical</span> <span class="pre">Dirichlet</span> <span class="pre">process</span> <span class="pre">Gaussian</span> <span class="pre">mixture</span> <span class="pre">model</span> <span class="pre">(HDPGMM)</span></code>.</p>
+<section id="todos">
+<h3>TODOs<a class="headerlink" href="#todos" title="Permalink to this heading"></a></h3>
+<ul>
+<li><ol class="arabic simple">
+<li><p>deployments</p></li>
+</ol>
+<ul class="simple">
+<li><p>[x] continuous doc with Travis + Sphinx + Github pages (see <a class="reference external" href="https://github.com/icgood/continuous-docs">this</a>)</p>
+<ul>
+<li><p>implemented using <code class="docutils literal notranslate"><span class="pre">github</span> <span class="pre">actions</span></code> following <a class="reference external" href="https://github.com/eeholmes/readthedoc-test">this repo</a></p></li>
+</ul>
+</li>
+<li><p>[ ] more documentations - module level docstrings, improving top-level README</p></li>
+<li><p>[ ] PyPI publish</p></li>
+</ul>
+</li>
+<li><ol class="arabic simple" start="2">
+<li><p>features</p></li>
+</ol>
+<ul class="simple">
+<li><p>[ ] turning into CSR-like layout; ‘masked-array-of-variable-sequence’ is not worth for the computational efficiency while make the memory efficiency terrible. (especially on GPU)</p></li>
+</ul>
+</li>
+</ul>
+</section>
+</section>
+<span class="target" id="module-hdpgmm"></span><hr class="docutils" />
+<p><strong>Sub-Modules</strong></p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.data.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.data</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset.h5_fn"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset.h5_fn</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset.whiten"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset.whiten</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset.chunk_size"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset.chunk_size</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset.verbose"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset.verbose</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.HDFMultiVarSeqDataset.apply_whitening"><code class="docutils literal notranslate"><span class="pre">HDFMultiVarSeqDataset.apply_whitening()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.AudioDataset"><code class="docutils literal notranslate"><span class="pre">AudioDataset</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.collate_var_len_seq"><code class="docutils literal notranslate"><span class="pre">collate_var_len_seq()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.data.html#hdpgmm.data.compute_global_mean_cov"><code class="docutils literal notranslate"><span class="pre">compute_global_mean_cov()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.math.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.math.html#hdpgmm.math.th_logdotexp"><code class="docutils literal notranslate"><span class="pre">th_logdotexp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.math.html#hdpgmm.math.th_batch_logdotexp_2d"><code class="docutils literal notranslate"><span class="pre">th_batch_logdotexp_2d()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.math.html#hdpgmm.math.th_masked_logsumexp"><code class="docutils literal notranslate"><span class="pre">th_masked_logsumexp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.math.html#hdpgmm.math.mat_sqrt"><code class="docutils literal notranslate"><span class="pre">mat_sqrt()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.model.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.model</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM"><code class="docutils literal notranslate"><span class="pre">HDPGMM</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.max_components_corpus"><code class="docutils literal notranslate"><span class="pre">HDPGMM.max_components_corpus</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.max_components_document"><code class="docutils literal notranslate"><span class="pre">HDPGMM.max_components_document</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.variational_params"><code class="docutils literal notranslate"><span class="pre">HDPGMM.variational_params</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.hyper_params"><code class="docutils literal notranslate"><span class="pre">HDPGMM.hyper_params</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.training_monitors"><code class="docutils literal notranslate"><span class="pre">HDPGMM.training_monitors</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.learning_hyperparams"><code class="docutils literal notranslate"><span class="pre">HDPGMM.learning_hyperparams</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.whiten_params"><code class="docutils literal notranslate"><span class="pre">HDPGMM.whiten_params</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.save"><code class="docutils literal notranslate"><span class="pre">HDPGMM.save()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.HDPGMM.load"><code class="docutils literal notranslate"><span class="pre">HDPGMM.load()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.lnB"><code class="docutils literal notranslate"><span class="pre">lnB()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.compute_ln_p_phi_x"><code class="docutils literal notranslate"><span class="pre">compute_ln_p_phi_x()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.compute_corpus_stick"><code class="docutils literal notranslate"><span class="pre">compute_corpus_stick()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.compute_document_stick"><code class="docutils literal notranslate"><span class="pre">compute_document_stick()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.compute_normalwishart_probs"><code class="docutils literal notranslate"><span class="pre">compute_normalwishart_probs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.e_step"><code class="docutils literal notranslate"><span class="pre">e_step()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.m_step"><code class="docutils literal notranslate"><span class="pre">m_step()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.update_parameters"><code class="docutils literal notranslate"><span class="pre">update_parameters()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.init_params"><code class="docutils literal notranslate"><span class="pre">init_params()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.init_temp_vars"><code class="docutils literal notranslate"><span class="pre">init_temp_vars()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.reinit_ss"><code class="docutils literal notranslate"><span class="pre">reinit_ss()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.package_model"><code class="docutils literal notranslate"><span class="pre">package_model()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.infer_documents"><code class="docutils literal notranslate"><span class="pre">infer_documents()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.save_state"><code class="docutils literal notranslate"><span class="pre">save_state()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.load_model"><code class="docutils literal notranslate"><span class="pre">load_model()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.model.html#hdpgmm.model.variational_inference"><code class="docutils literal notranslate"><span class="pre">variational_inference()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.parameters.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.Parameters"><code class="docutils literal notranslate"><span class="pre">Parameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.Parameters.log_prob"><code class="docutils literal notranslate"><span class="pre">Parameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.mu0"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.mu0</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.lmbda"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.lmbda</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.nu"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.nu</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.keep_inverse_W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.keep_inverse_W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.W_chol"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W_chol</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.logdet_W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.logdet_W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.W_inv"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W_inv</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.Eq_eta_1"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.Eq_eta_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.Eq_a_eta"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.Eq_a_eta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.stable"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.stable</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.NormalWishartParameters.log_prob"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DirichletMultinomialParameters"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DirichletMultinomialParameters.alphas"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.alphas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DirichletMultinomialParameters.Eq_eta_1"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.Eq_eta_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DirichletMultinomialParameters.Eq_a_eta"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.Eq_a_eta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DirichletMultinomialParameters.log_prob"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters"><code class="docutils literal notranslate"><span class="pre">DPParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.max_components"><code class="docutils literal notranslate"><span class="pre">DPParameters.max_components</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.alphas"><code class="docutils literal notranslate"><span class="pre">DPParameters.alphas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.betas"><code class="docutils literal notranslate"><span class="pre">DPParameters.betas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.Eq_logV"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_logV</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_log_1_minus_V</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V_cumsum"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_log_1_minus_V_cumsum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.pi_v"><code class="docutils literal notranslate"><span class="pre">DPParameters.pi_v</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.DPParameters.log_pi_v"><code class="docutils literal notranslate"><span class="pre">DPParameters.log_pi_v</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.BetaParameters"><code class="docutils literal notranslate"><span class="pre">BetaParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.BetaParameters.alpha"><code class="docutils literal notranslate"><span class="pre">BetaParameters.alpha</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.BetaParameters.beta"><code class="docutils literal notranslate"><span class="pre">BetaParameters.beta</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.GammaParameters"><code class="docutils literal notranslate"><span class="pre">GammaParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.GammaParameters.alpha"><code class="docutils literal notranslate"><span class="pre">GammaParameters.alpha</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.GammaParameters.beta"><code class="docutils literal notranslate"><span class="pre">GammaParameters.beta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="hdpgmm.parameters.html#hdpgmm.parameters.GammaParameters.mean"><code class="docutils literal notranslate"><span class="pre">GammaParameters.mean</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="hdpgmm.data.html" class="btn btn-neutral float-right" title="hdpgmm.data Module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jaehun Kim.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

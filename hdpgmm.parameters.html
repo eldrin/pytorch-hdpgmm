@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hdpgmm.parameters Module &mdash; pytorch-hdpgmm 0.0.1 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="hdpgmm.model Module" href="hdpgmm.model.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> pytorch-hdpgmm
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.data.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.data</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.math.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.math</span></code> Module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hdpgmm.model.html"><code class="docutils literal notranslate"><span class="pre">hdpgmm.model</span></code> Module</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.Parameters"><code class="docutils literal notranslate"><span class="pre">Parameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.Parameters.log_prob"><code class="docutils literal notranslate"><span class="pre">Parameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.mu0"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.mu0</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.lmbda"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.lmbda</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.nu"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.nu</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.keep_inverse_W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.keep_inverse_W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.W_chol"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W_chol</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.logdet_W"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.logdet_W</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.W_inv"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.W_inv</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.Eq_eta_1"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.Eq_eta_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.Eq_a_eta"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.Eq_a_eta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.stable"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.stable</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.NormalWishartParameters.log_prob"><code class="docutils literal notranslate"><span class="pre">NormalWishartParameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.DirichletMultinomialParameters"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DirichletMultinomialParameters.alphas"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.alphas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DirichletMultinomialParameters.Eq_eta_1"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.Eq_eta_1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DirichletMultinomialParameters.Eq_a_eta"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.Eq_a_eta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DirichletMultinomialParameters.log_prob"><code class="docutils literal notranslate"><span class="pre">DirichletMultinomialParameters.log_prob()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.DPParameters"><code class="docutils literal notranslate"><span class="pre">DPParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.max_components"><code class="docutils literal notranslate"><span class="pre">DPParameters.max_components</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.alphas"><code class="docutils literal notranslate"><span class="pre">DPParameters.alphas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.betas"><code class="docutils literal notranslate"><span class="pre">DPParameters.betas</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.Eq_logV"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_logV</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_log_1_minus_V</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V_cumsum"><code class="docutils literal notranslate"><span class="pre">DPParameters.Eq_log_1_minus_V_cumsum</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.pi_v"><code class="docutils literal notranslate"><span class="pre">DPParameters.pi_v</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.DPParameters.log_pi_v"><code class="docutils literal notranslate"><span class="pre">DPParameters.log_pi_v</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.BetaParameters"><code class="docutils literal notranslate"><span class="pre">BetaParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.BetaParameters.alpha"><code class="docutils literal notranslate"><span class="pre">BetaParameters.alpha</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.BetaParameters.beta"><code class="docutils literal notranslate"><span class="pre">BetaParameters.beta</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#hdpgmm.parameters.GammaParameters"><code class="docutils literal notranslate"><span class="pre">GammaParameters</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.GammaParameters.alpha"><code class="docutils literal notranslate"><span class="pre">GammaParameters.alpha</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.GammaParameters.beta"><code class="docutils literal notranslate"><span class="pre">GammaParameters.beta</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hdpgmm.parameters.GammaParameters.mean"><code class="docutils literal notranslate"><span class="pre">GammaParameters.mean</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pytorch-hdpgmm</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a></li>
+      <li class="breadcrumb-item active"><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/hdpgmm.parameters.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-hdpgmm.parameters">
+<span id="hdpgmm-parameters-module"></span><h1><code class="docutils literal notranslate"><span class="pre">hdpgmm.parameters</span></code> Module<a class="headerlink" href="#module-hdpgmm.parameters" title="Permalink to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.Parameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">Parameters</span></span><a class="headerlink" href="#hdpgmm.parameters.Parameters" title="Permalink to this definition"></a></dt>
+<dd><p>It is a base dataclass that is inherited to diverse parameter objects.</p>
+<p>for some of the intermediate values (i.e., Eq_eta_1, Eq_eta_2, etc.),
+We followed (Blei and Jordan 2006) and Wikipedia entry of the <a class="reference external" href="https://en.wikipedia.org/wiki/Exponential_family#Table_of_distributions">exponential family</a>.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="hdpgmm.parameters.Parameters.log_prob">
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#hdpgmm.parameters.Parameters.log_prob" title="Permalink to this definition"></a></dt>
+<dd><p>compute log probability of given observation X</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>X</strong> – input data of shape of (n_samples, …). Trailing sizes represents
+the shape of the objects</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>an array of shape (n_samples,) contains log-probabilities of
+given set of observations.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">NormalWishartParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mu0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lmbda</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_inverse_W</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters" title="Permalink to this definition"></a></dt>
+<dd><p>It contains the parameters of Normal-Wishart distribution, namely
+location (m0), precision (W), the degree of freedom (nu), and the
+precision scaler (lmbda).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.mu0">
+<span class="sig-name descname"><span class="pre">mu0</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.mu0" title="Permalink to this definition"></a></dt>
+<dd><p>location parameter</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.lmbda">
+<span class="sig-name descname"><span class="pre">lmbda</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.lmbda" title="Permalink to this definition"></a></dt>
+<dd><p>precision scale parameter</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.W">
+<span class="sig-name descname"><span class="pre">W</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.W" title="Permalink to this definition"></a></dt>
+<dd><p>precision parameter</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.nu">
+<span class="sig-name descname"><span class="pre">nu</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.nu" title="Permalink to this definition"></a></dt>
+<dd><p>degree of freedom parameter</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.keep_inverse_W">
+<span class="sig-name descname"><span class="pre">keep_inverse_W</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.keep_inverse_W" title="Permalink to this definition"></a></dt>
+<dd><p>if set True, it computes the inverse of the
+precision and keep it as an attributes (W_inv)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.W_chol">
+<span class="sig-name descname"><span class="pre">W_chol</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.W_chol" title="Permalink to this definition"></a></dt>
+<dd><p>optional field contains the Cholesky decomposition of the precision</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.logdet_W">
+<span class="sig-name descname"><span class="pre">logdet_W</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.logdet_W" title="Permalink to this definition"></a></dt>
+<dd><p>log determinant of precision</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.W_inv">
+<span class="sig-name descname"><span class="pre">W_inv</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.W_inv" title="Permalink to this definition"></a></dt>
+<dd><p>optional field contains the inverse of precision</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code>, optional</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.Eq_eta_1">
+<span class="sig-name descname"><span class="pre">Eq_eta_1</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.Eq_eta_1" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[\eta]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.Eq_a_eta">
+<span class="sig-name descname"><span class="pre">Eq_a_eta</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.Eq_a_eta" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[a(\eta)]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.stable">
+<span class="sig-name descname"><span class="pre">stable</span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.stable" title="Permalink to this definition"></a></dt>
+<dd><p>with this flag, the “square root” of the precision matrix W
+is computed using the SVD with forcefully truncating the
+eigenvalues larger or equal to zero. If not set, it is
+computed by the Cholesky decomposition.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hdpgmm.parameters.NormalWishartParameters.log_prob">
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#hdpgmm.parameters.NormalWishartParameters.log_prob" title="Permalink to this definition"></a></dt>
+<dd><p>compute log probability of given observation X</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>X</strong> – input data of shape of (n_samples, …). Trailing sizes represents
+the shape of the objects</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>an array of shape (n_samples,) contains log-probabilities of
+given set of observations.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DirichletMultinomialParameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">DirichletMultinomialParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alphas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hdpgmm.parameters.DirichletMultinomialParameters" title="Permalink to this definition"></a></dt>
+<dd><p>It contains the parameters of Dirichlet-Multinomial distribution, namely
+alphas, which is the concentration parameter of Dicichlet prior.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DirichletMultinomialParameters.alphas">
+<span class="sig-name descname"><span class="pre">alphas</span></span><a class="headerlink" href="#hdpgmm.parameters.DirichletMultinomialParameters.alphas" title="Permalink to this definition"></a></dt>
+<dd><p>concentration parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DirichletMultinomialParameters.Eq_eta_1">
+<span class="sig-name descname"><span class="pre">Eq_eta_1</span></span><a class="headerlink" href="#hdpgmm.parameters.DirichletMultinomialParameters.Eq_eta_1" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[\eta]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DirichletMultinomialParameters.Eq_a_eta">
+<span class="sig-name descname"><span class="pre">Eq_a_eta</span></span><a class="headerlink" href="#hdpgmm.parameters.DirichletMultinomialParameters.Eq_a_eta" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[a(\eta)]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DirichletMultinomialParameters.log_prob">
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">csr_matrix</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#hdpgmm.parameters.DirichletMultinomialParameters.log_prob" title="Permalink to this definition"></a></dt>
+<dd><p>compute log probability of given observation X</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>X</strong> – input data of shape of (n_samples, …). Trailing sizes represents
+the shape of the objects</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>an array of shape (n_samples,) contains log-probabilities of
+given set of observations.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">DPParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_components</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alphas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">betas</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hdpgmm.parameters.DPParameters" title="Permalink to this definition"></a></dt>
+<dd><p>It contains the parameters of Dirichlet Process parameters, namely
+the shape parameter alphas and betas. The dimensionality of them is truncated to a
+finite integer <cite>K</cite>, as it mostly assumes the variational inference.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.max_components">
+<span class="sig-name descname"><span class="pre">max_components</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.max_components" title="Permalink to this definition"></a></dt>
+<dd><p>the maximum number of components (trunctation threshold)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">int</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.alphas">
+<span class="sig-name descname"><span class="pre">alphas</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.alphas" title="Permalink to this definition"></a></dt>
+<dd><p>the first shape parameter of Beta distributions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.betas">
+<span class="sig-name descname"><span class="pre">betas</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.betas" title="Permalink to this definition"></a></dt>
+<dd><p>the second shape parameter of Beta distributions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.Eq_logV">
+<span class="sig-name descname"><span class="pre">Eq_logV</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.Eq_logV" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[\text{log}V]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.Eq_log_1_minus_V">
+<span class="sig-name descname"><span class="pre">Eq_log_1_minus_V</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V" title="Permalink to this definition"></a></dt>
+<dd><p>contains <span class="math notranslate nohighlight">\(E_{q}[\text{log}(1 - V)]\)</span>, which follows (Blei and Jordan 2006)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.Eq_log_1_minus_V_cumsum">
+<span class="sig-name descname"><span class="pre">Eq_log_1_minus_V_cumsum</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.Eq_log_1_minus_V_cumsum" title="Permalink to this definition"></a></dt>
+<dd><p>contains the cumulative sum of <span class="math notranslate nohighlight">\(E_{q}[\text{log}(1 - V)]\)</span> for handy
+computation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.pi_v">
+<span class="sig-name descname"><span class="pre">pi_v</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.pi_v" title="Permalink to this definition"></a></dt>
+<dd><p>it is <span class="math notranslate nohighlight">\(E_{q}[\text{log} \pi]\)</span> which is
+the sum of <span class="math notranslate nohighlight">\(E_{q}[\text{log}V]\)</span> and <span class="math notranslate nohighlight">\(E_{q}[\text{log}(1 - V)]\)</span>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.DPParameters.log_pi_v">
+<span class="sig-name descname"><span class="pre">log_pi_v</span></span><a class="headerlink" href="#hdpgmm.parameters.DPParameters.log_pi_v" title="Permalink to this definition"></a></dt>
+<dd><p>log of <span class="math notranslate nohighlight">\(E_{q}[\text{log} \pi]\)</span></p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numpy.typing.NDArray</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.BetaParameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">BetaParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hdpgmm.parameters.BetaParameters" title="Permalink to this definition"></a></dt>
+<dd><p>It contains the parameters of Beta distribution, <cite>alpha</cite> and <cite>beta</cite>.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.BetaParameters.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#hdpgmm.parameters.BetaParameters.alpha" title="Permalink to this definition"></a></dt>
+<dd><p>the first shape parameter of Beta distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.BetaParameters.beta">
+<span class="sig-name descname"><span class="pre">beta</span></span><a class="headerlink" href="#hdpgmm.parameters.BetaParameters.beta" title="Permalink to this definition"></a></dt>
+<dd><p>the second shape parameter of Beta distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="hdpgmm.parameters.GammaParameters">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">hdpgmm.parameters.</span></span><span class="sig-name descname"><span class="pre">GammaParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#hdpgmm.parameters.GammaParameters" title="Permalink to this definition"></a></dt>
+<dd><p>It contains the parameters of Gamma distribution <cite>alpha</cite> and <cite>beta</cite>.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.GammaParameters.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#hdpgmm.parameters.GammaParameters.alpha" title="Permalink to this definition"></a></dt>
+<dd><p>the shape parameter of Gamma distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="hdpgmm.parameters.GammaParameters.beta">
+<span class="sig-name descname"><span class="pre">beta</span></span><a class="headerlink" href="#hdpgmm.parameters.GammaParameters.beta" title="Permalink to this definition"></a></dt>
+<dd><p>the inverse scale parameter of Gamma distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="hdpgmm.parameters.GammaParameters.mean">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">mean</span></span><a class="headerlink" href="#hdpgmm.parameters.GammaParameters.mean" title="Permalink to this definition"></a></dt>
+<dd><p>compute the average of Gamma distribution</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>computed average of the Gamma distribution</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="hdpgmm.model.html" class="btn btn-neutral float-left" title="hdpgmm.model Module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jaehun Kim.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
